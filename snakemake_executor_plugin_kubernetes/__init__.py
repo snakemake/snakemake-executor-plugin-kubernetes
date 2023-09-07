@@ -23,30 +23,34 @@ from snakemake_interface_common.exceptions import WorkflowError
 # Omit this class if you don't need any.
 @dataclass
 class ExecutorSettings(ExecutorSettingsBase):
-    namespace: str = field(default="default", metadata={"help": "The namespace to use for submitted jobs."})
+    namespace: str = field(
+        default="default", metadata={"help": "The namespace to use for submitted jobs."}
+    )
     cpu_scalar: float = field(
         default=0.95,
         metadata={
             "help": "K8s reserves some proportion of available CPUs for its own use. "
-        "So, where an underlying node may have 8 CPUs, only e.g. 7600 milliCPUs "
-        "are allocatable to k8s pods (i.e. snakemake jobs). As 8 > 7.6, k8s can't "
-        "find a node with enough CPU resource to run such jobs. This argument acts "
-        "as a global scalar on each job's CPU request, so that e.g. a job whose "
-        "rule definition asks for 8 CPUs will request 7600m CPUs from k8s, "
-        "allowing it to utilise one entire node. N.B: the job itself would still "
-        "see the original value, i.e. as the value substituted in {threads}."
-        }
+            "So, where an underlying node may have 8 CPUs, only e.g. 7600 milliCPUs "
+            "are allocatable to k8s pods (i.e. snakemake jobs). As 8 > 7.6, k8s can't "
+            "find a node with enough CPU resource to run such jobs. This argument acts "
+            "as a global scalar on each job's CPU request, so that e.g. a job whose "
+            "rule definition asks for 8 CPUs will request 7600m CPUs from k8s, "
+            "allowing it to utilise one entire node. N.B: the job itself would still "
+            "see the original value, i.e. as the value substituted in {threads}."
+        },
     )
     service_account_name: Optional[str] = field(
         default=None,
         metadata={
-            "help": "This argument allows the use of customer service accounts for "
-            "kubernetes pods. If specified, serviceAccountName will be added to the "
-            "pod specs. This is e.g. needed when using workload identity which is enforced "
+            "help": "This argument allows the use of customer service "
+            "accounts for "
+            "kubernetes pods. If specified, serviceAccountName will "
+            "be added to the "
+            "pod specs. This is e.g. needed when using workload "
+            "identity which is enforced "
             "when using Google Cloud GKE Autopilot."
-        }
+        },
     )
-
 
 
 # Required:
@@ -93,8 +97,12 @@ class Executor(RemoteExecutor):
             )
         config.load_kube_config()
 
+        import kubernetes
+
         self.k8s_cpu_scalar = self.workflow.executor_settings.cpu_scalar
-        self.k8s_service_account_name = self.workflow.executor_settings.service_account_name
+        self.k8s_service_account_name = (
+            self.workflow.executor_settings.service_account_name
+        )
         self.kubeapi = kubernetes.client.CoreV1Api()
         self.batchapi = kubernetes.client.BatchV1Api()
         self.namespace = self.workflow.executor_settings.namespace
@@ -218,7 +226,8 @@ class Executor(RemoteExecutor):
             # TODO this should work, but it doesn't currently because of
             # missing loop devices
             # singularity inside docker requires SYS_ADMIN capabilities
-            # see https://groups.google.com/a/lbl.gov/forum/#!topic/singularity/e9mlDuzKowc
+            # see
+            # https://groups.google.com/a/lbl.gov/forum/#!topic/singularity/e9mlDuzKowc
             # container.capabilities = kubernetes.client.V1Capabilities()
             # container.capabilities.add = ["SYS_ADMIN",
             #                               "DAC_OVERRIDE",
@@ -242,11 +251,7 @@ class Executor(RemoteExecutor):
         )
 
         self.report_job_submission(
-            SubmittedJobInfo(
-                job=job,
-                external_jobid=jobid,
-                aux={"pod": pod}
-            )
+            SubmittedJobInfo(job=job, external_jobid=jobid, aux={"pod": pod})
         )
 
     async def check_active_jobs(
@@ -271,7 +276,6 @@ class Executor(RemoteExecutor):
         for j in active_jobs:
             async with self.status_rate_limiter:
                 self.logger.debug(f"Checking status for pod {j.jobid}")
-                job_not_found = False
                 try:
                     res = self._kubernetes_retry(
                         lambda: self.kubeapi.read_namespaced_pod_status(
@@ -293,9 +297,7 @@ class Executor(RemoteExecutor):
 
                 if res is None:
                     msg = (
-                        "Unknown pod {jobid}. "
-                        "Has the pod been deleted "
-                        "manually?"
+                        "Unknown pod {jobid}. " "Has the pod been deleted " "manually?"
                     ).format(jobid=j.external_jobid)
                     self.print_job_error(j.job, msg=msg)
                     self.report_job_error(j.job)
@@ -312,10 +314,9 @@ class Executor(RemoteExecutor):
                     # finished
                     self.report_job_success(j.job)
 
-                    func = lambda: self.safe_delete_pod(
-                        j.jobid, ignore_not_found=True
+                    self._kubernetes_retry(
+                        lambda: self.safe_delete_pod(j.jobid, ignore_not_found=True)
                     )
-                    self._kubernetes_retry(func)
                 else:
                     # still active
                     yield j
@@ -325,8 +326,9 @@ class Executor(RemoteExecutor):
         # This method is called when Snakemake is interrupted.
 
         for j in active_jobs:
-            func = lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
-            self._kubernetes_retry(func)
+            self._kubernetes_retry(
+                lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
+            )
 
     def shutdown(self):
         self.unregister_secret()
@@ -334,7 +336,7 @@ class Executor(RemoteExecutor):
 
     def get_job_exec_prefix(self, job: ExecutorJobInterface):
         return "cp -rf /source/. ."
-    
+
     def register_secret(self):
         import kubernetes.client
 
@@ -368,8 +370,10 @@ class Executor(RemoteExecutor):
             with open(f, "br") as content:
                 key = f"f{i}"
 
-                # Some files are smaller than 1MB, but grows larger after being base64 encoded
-                # We should exclude them as well, otherwise Kubernetes APIs will complain
+                # Some files are smaller than 1MB, but grows larger after being
+                # base64 encoded.
+                # We should exclude them as well, otherwise Kubernetes APIs will
+                # complain.
                 encoded_contents = base64.b64encode(content.read()).decode()
                 encoded_size = len(encoded_contents)
                 if encoded_size > 1048576:
@@ -425,10 +429,13 @@ class Executor(RemoteExecutor):
     def unregister_secret(self):
         import kubernetes.client
 
-        safe_delete_secret = lambda: self.kubeapi.delete_namespaced_secret(
-            self.run_namespace, self.namespace, body=kubernetes.client.V1DeleteOptions()
+        self._kubernetes_retry(
+            lambda: self.kubeapi.delete_namespaced_secret(
+                self.run_namespace,
+                self.namespace,
+                body=kubernetes.client.V1DeleteOptions(),
+            )
         )
-        self._kubernetes_retry(safe_delete_secret)
 
     # In rare cases, deleting a pod may raise 404 NotFound error.
     def safe_delete_pod(self, jobid, ignore_not_found=True):
@@ -473,7 +480,9 @@ class Executor(RemoteExecutor):
             self.register_secret()
         except kubernetes.client.rest.ApiException as e:
             if e.status == 409 and e.reason == "Conflict":
-                self.logger.warning("409 conflict ApiException when registering secrets")
+                self.logger.warning(
+                    "409 conflict ApiException when registering secrets"
+                )
                 self.logger.warning(e)
             else:
                 raise WorkflowError(
@@ -499,16 +508,17 @@ class Executor(RemoteExecutor):
                     # refreshed. Then try again.
                     return self._reauthenticate_and_retry(func)
             # Handling timeout that may occur in case of GKE master upgrade
-            except urllib3.exceptions.MaxRetryError as e:
+            except urllib3.exceptions.MaxRetryError:
                 self.logger.warning(
                     "Request time out! "
                     "check your connection to Kubernetes master"
-                    "Workflow will pause for 5 minutes to allow any update operations to complete"
+                    "Workflow will pause for 5 minutes to allow any update "
+                    "operations to complete"
                 )
                 time.sleep(300)
                 try:
                     return func()
-                except:
+                except Exception as e:
                     # Still can't reach the server after 5 minutes
                     raise WorkflowError(
                         e,
@@ -517,7 +527,11 @@ class Executor(RemoteExecutor):
                     )
 
 
-UUID_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://github.com/snakemake/snakemake-executor-plugin-kubernetes")
+UUID_NAMESPACE = uuid.uuid5(
+    uuid.NAMESPACE_URL,
+    "https://github.com/snakemake/snakemake-executor-plugin-kubernetes",
+)
+
 
 def get_uuid(name):
     return uuid.uuid5(UUID_NAMESPACE, name)
