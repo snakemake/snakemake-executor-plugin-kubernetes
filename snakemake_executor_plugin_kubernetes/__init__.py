@@ -275,11 +275,11 @@ class Executor(RemoteExecutor):
 
         for j in active_jobs:
             async with self.status_rate_limiter:
-                self.logger.debug(f"Checking status for pod {j.jobid}")
+                self.logger.debug(f"Checking status for pod {j.external_jobid}")
                 try:
                     res = self._kubernetes_retry(
                         lambda: self.kubeapi.read_namespaced_pod_status(
-                            j.jobid, self.namespace
+                            j.external_jobid, self.namespace
                         )
                     )
                 except kubernetes.client.rest.ApiException as e:
@@ -314,7 +314,7 @@ class Executor(RemoteExecutor):
                     self.report_job_success(j.job)
 
                     self._kubernetes_retry(
-                        lambda: self.safe_delete_pod(j.jobid, ignore_not_found=True)
+                        lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
                     )
                 else:
                     # still active
