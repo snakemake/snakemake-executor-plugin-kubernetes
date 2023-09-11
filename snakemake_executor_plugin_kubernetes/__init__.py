@@ -290,16 +290,14 @@ class Executor(RemoteExecutor):
                         j.callback(j.job)
                         continue
                 except WorkflowError as e:
-                    self.print_job_error(j, msg=str(e))
-                    self.report_job_error(j.job)
+                    self.report_job_error(j, msg=str(e))
                     continue
 
                 if res is None:
                     msg = (
                         "Unknown pod {jobid}. " "Has the pod been deleted " "manually?"
                     ).format(jobid=j.external_jobid)
-                    self.print_job_error(j, msg=msg)
-                    self.report_job_error(j.job)
+                    self.report_job_error(j, msg=msg)
                 elif res.status.phase == "Failed":
                     msg = (
                         "For details, please issue:\n"
@@ -307,11 +305,10 @@ class Executor(RemoteExecutor):
                         "kubectl logs {jobid}"
                     ).format(jobid=j.external_jobid)
                     # failed
-                    self.print_job_error(j, msg=msg)
-                    self.report_job_error(j.job)
+                    self.report_job_error(j, msg=msg)
                 elif res.status.phase == "Succeeded":
                     # finished
-                    self.report_job_success(j.job)
+                    self.report_job_success(j)
 
                     self._kubernetes_retry(
                         lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
