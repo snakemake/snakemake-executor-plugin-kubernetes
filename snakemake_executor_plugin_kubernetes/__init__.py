@@ -15,6 +15,7 @@ from snakemake_interface_executor_plugins.jobs import (
     ExecutorJobInterface,
 )
 from snakemake_interface_common.exceptions import WorkflowError
+from snakemake_interface_executor_plugins.settings import DeploymentMethod
 
 
 # Optional:
@@ -222,7 +223,11 @@ class Executor(RemoteExecutor):
         self.logger.debug(f"k8s pod resources: {container.resources.requests}")
 
         # capabilities
-        if job.needs_singularity and self.workflow.deployment_settings.use_singularity:
+        if (
+            job.is_containerized
+            and DeploymentMethod.APPTAINER
+            in self.workflow.deployment_settings.deployment_method
+        ):
             # TODO this should work, but it doesn't currently because of
             # missing loop devices
             # singularity inside docker requires SYS_ADMIN capabilities
@@ -311,7 +316,9 @@ class Executor(RemoteExecutor):
                     self.report_job_success(j)
 
                     self._kubernetes_retry(
-                        lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
+                        lambda: self.safe_delete_pod(
+                            j.external_jobid, ignore_not_found=True
+                        )
                     )
                 else:
                     # still active
