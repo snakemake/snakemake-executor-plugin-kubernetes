@@ -12,7 +12,7 @@ from snakemake_interface_executor_plugins import ExecutorSettingsBase, CommonSet
 from snakemake_interface_executor_plugins.workflow import WorkflowExecutorInterface
 from snakemake_interface_executor_plugins.logging import LoggerExecutorInterface
 from snakemake_interface_executor_plugins.jobs import (
-    ExecutorJobInterface,
+    JobExecutorInterface,
 )
 from snakemake_interface_common.exceptions import WorkflowError
 from snakemake_interface_executor_plugins.settings import DeploymentMethod
@@ -115,7 +115,7 @@ class Executor(RemoteExecutor):
         self.container_image = self.workflow.remote_execution_settings.container_image
         logger.info(f"Using {self.container_image} for Kubernetes jobs.")
 
-    def run_job(self, job: ExecutorJobInterface):
+    def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
         # You can access the job's resources, etc.
         # via the job object.
@@ -337,7 +337,7 @@ class Executor(RemoteExecutor):
         self.unregister_secret()
         super().shutdown()
 
-    def get_job_exec_prefix(self, job: ExecutorJobInterface):
+    def get_job_exec_prefix(self, job: JobExecutorInterface):
         return "cp -rf /source/. ."
 
     def register_secret(self):
