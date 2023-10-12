@@ -6,8 +6,9 @@ from snakemake_interface_executor_plugins import ExecutorSettingsBase
 from snakemake_executor_plugin_kubernetes import ExecutorSettings
 
 
-BUCKET_NAME = "snakemake-testing-kubernetes-%s-bucket" % next(tempfile._get_candidate_names())
-
+BUCKET_NAME = "snakemake-testing-kubernetes-%s-bucket" % next(
+    tempfile._get_candidate_names()
+)
 
 
 class TestWorkflows(snakemake.common.tests.TestWorkflowsMinioPlayStorageBase):

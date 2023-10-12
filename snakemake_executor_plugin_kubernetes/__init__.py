@@ -310,7 +310,18 @@ class Executor(RemoteExecutor):
                         "kubectl logs {jobid}"
                     ).format(jobid=j.external_jobid)
                     # failed
-                    self.report_job_error(j, msg=msg)
+                    kube_log_content = self.kubeapi.read_namespaced_pod_log(
+                        name=j.external_jobid, namespace=self.namespace
+                    )
+                    kube_log = (
+                        self.workflow.persistence.aux_path
+                        / "kubernetes-logs"
+                        / j.external_jobid,
+                        "w",
+                    )
+                    with open(kube_log) as f:
+                        f.write(kube_log_content)
+                    self.report_job_error(j, msg=msg, aux_logs=[kube_log])
                 elif res.status.phase == "Succeeded":
                     # finished
                     self.report_job_success(j)
