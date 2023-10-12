@@ -313,6 +313,8 @@ class Executor(RemoteExecutor):
                     kube_log_content = self.kubeapi.read_namespaced_pod_log(
                         name=j.external_jobid, namespace=self.namespace
                     )
+                    # TODO remove debug
+                    print(kube_log_content)
                     kube_log = (
                         self.workflow.persistence.aux_path
                         / "kubernetes-logs"
