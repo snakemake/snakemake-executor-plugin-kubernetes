@@ -300,7 +300,7 @@ class Executor(RemoteExecutor):
 
                 if res is None:
                     msg = (
-                        "Unknown pod {jobid}. " "Has the pod been deleted " "manually?"
+                        "Unknown pod {jobid}. Has the pod been deleted manually?"
                     ).format(jobid=j.external_jobid)
                     self.report_job_error(j, msg=msg)
                 elif res.status.phase == "Failed":
