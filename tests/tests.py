@@ -2,7 +2,7 @@ import tempfile
 from typing import Optional
 import snakemake.common.tests
 import snakemake.settings
-from snakemake_interface_executor_plugins import ExecutorSettingsBase
+from snakemake_interface_executor_plugins.settings import ExecutorSettingsBase
 
 from snakemake_executor_plugin_kubernetes import ExecutorSettings
 
