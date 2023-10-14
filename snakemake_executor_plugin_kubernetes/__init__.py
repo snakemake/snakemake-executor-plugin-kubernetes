@@ -115,6 +115,8 @@ class Executor(RemoteExecutor):
         self.run_namespace = str(uuid.uuid4())
         self.secret_envvars = {}
         self.register_secret()
+        self.log_path = self.workflow.persistence.aux_path / "kubernetes-logs"
+        self.log_path.mkdir(exist_ok=True, parents=True)
         self.container_image = self.workflow.remote_execution_settings.container_image
         logger.info(f"Using {self.container_image} for Kubernetes jobs.")
 
@@ -316,15 +318,8 @@ class Executor(RemoteExecutor):
                     kube_log_content = self.kubeapi.read_namespaced_pod_log(
                         name=j.external_jobid, namespace=self.namespace
                     )
-                    # TODO remove debug
-                    print(kube_log_content)
-                    kube_log = (
-                        self.workflow.persistence.aux_path
-                        / "kubernetes-logs"
-                        / j.external_jobid,
-                        "w",
-                    )
-                    with open(kube_log) as f:
+                    kube_log = self.log_path / f"{j.external_jobid}.log"
+                    with open(kube_log, "w") as f:
                         f.write(kube_log_content)
                     self.report_job_error(j, msg=msg, aux_logs=[kube_log])
                 elif res.status.phase == "Succeeded":
