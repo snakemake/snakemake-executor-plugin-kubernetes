@@ -6,14 +6,17 @@ import subprocess
 import time
 from typing import List, Generator, Optional
 import uuid
+
+import kubernetes
+import kubernetes.config
+import kubernetes.client
+
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.remote import RemoteExecutor
 from snakemake_interface_executor_plugins.settings import (
     ExecutorSettingsBase,
     CommonSettings,
 )
-from snakemake_interface_executor_plugins.workflow import WorkflowExecutorInterface
-from snakemake_interface_executor_plugins.logging import LoggerExecutorInterface
 from snakemake_interface_executor_plugins.jobs import (
     JobExecutorInterface,
 )
@@ -70,38 +73,18 @@ common_settings = CommonSettings(
     # filesystem (True) or not (False).
     # This is e.g. the case for cloud execution.
     implies_no_shared_fs=True,
+    pass_default_storage_provider_args=True,
+    pass_default_resources_args=True,
+    pass_envvar_declarations_to_cmd=False,
+    auto_deploy_default_storage_provider=True,
 )
 
 
 # Required:
 # Implementation of your executor
 class Executor(RemoteExecutor):
-    def __init__(
-        self,
-        workflow: WorkflowExecutorInterface,
-        logger: LoggerExecutorInterface,
-    ):
-        super().__init__(
-            workflow,
-            logger,
-            # configure behavior of RemoteExecutor below
-            # whether arguments for setting the remote provider shall  be passed to jobs
-            pass_default_storage_provider_args=True,
-            # whether arguments for setting default resources shall be passed to jobs
-            pass_default_resources_args=True,
-            # whether environment variables shall be passed to jobs
-            pass_envvar_declarations_to_cmd=False,
-        )
-        try:
-            from kubernetes import config
-        except ImportError:
-            raise WorkflowError(
-                "The Python 3 package 'kubernetes' "
-                "must be installed to use Kubernetes"
-            )
-        config.load_kube_config()
-
-        import kubernetes
+    def __post_init__(self):
+        kubernetes.config.load_kube_config()
 
         self.k8s_cpu_scalar = self.workflow.executor_settings.cpu_scalar
         self.k8s_service_account_name = (
@@ -110,7 +93,7 @@ class Executor(RemoteExecutor):
         self.kubeapi = kubernetes.client.CoreV1Api()
         self.batchapi = kubernetes.client.BatchV1Api()
         self.namespace = self.workflow.executor_settings.namespace
-        self.envvars = workflow.envvars
+        self.envvars = self.workflow.envvars
         self.secret_files = {}
         self.run_namespace = str(uuid.uuid4())
         self.secret_envvars = {}
@@ -118,7 +101,7 @@ class Executor(RemoteExecutor):
         self.log_path = self.workflow.persistence.aux_path / "kubernetes-logs"
         self.log_path.mkdir(exist_ok=True, parents=True)
         self.container_image = self.workflow.remote_execution_settings.container_image
-        logger.info(f"Using {self.container_image} for Kubernetes jobs.")
+        self.logger.info(f"Using {self.container_image} for Kubernetes jobs.")
 
     def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
@@ -128,8 +111,6 @@ class Executor(RemoteExecutor):
         # self.report_job_submission(job_info).
         # with job_info being of type
         # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
-
-        import kubernetes.client
 
         exec_job = self.format_job_exec(job)
 
