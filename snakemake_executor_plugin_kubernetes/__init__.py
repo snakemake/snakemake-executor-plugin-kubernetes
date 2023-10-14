@@ -266,7 +266,6 @@ class Executor(RemoteExecutor):
 
         for j in active_jobs:
             async with self.status_rate_limiter:
-                self.logger.debug(f"Checking status for pod {j.external_jobid}")
                 try:
                     res = self._kubernetes_retry(
                         lambda: self.kubeapi.read_namespaced_pod_status(
