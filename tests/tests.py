@@ -24,14 +24,6 @@ class TestWorkflows(snakemake.common.tests.TestWorkflowsMinioPlayStorageBase):
     def get_assume_shared_fs(self) -> bool:
         return False
 
-    def get_deployment_settings(
-        self, deployment_method=frozenset()
-    ) -> snakemake.settings.DeploymentSettings:
-        return snakemake.settings.DeploymentSettings(
-            deployment_method=deployment_method,
-            default_storage_provider_auto_deploy=True,
-        )
-
     def get_remote_execution_settings(
         self,
     ) -> snakemake.settings.RemoteExecutionSettings:
