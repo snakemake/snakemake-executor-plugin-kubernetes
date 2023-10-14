@@ -321,7 +321,7 @@ class Executor(RemoteExecutor):
                     kube_log = self.log_path / f"{j.external_jobid}.log"
                     with open(kube_log, "w") as f:
                         f.write(kube_log_content)
-                    self.report_job_error(j, msg=msg, aux_logs=[kube_log])
+                    self.report_job_error(j, msg=msg, aux_logs=[str(kube_log)])
                 elif res.status.phase == "Succeeded":
                     # finished
                     self.report_job_success(j)
