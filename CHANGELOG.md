@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.1](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.1.0...v0.1.1) (2023-10-17)
+
+
+### Bug Fixes
+
+* fix release process ([1861240](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/1861240110afb8fcb1b00668a94947dce4ab7a47))
+
+
+### Miscellaneous Chores
+
+* release 0.1.1 ([a5ea315](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/a5ea3154351fbfae993280165ec65f8d7c4b1d89))
+
 ## 0.1.0 (2023-10-17)
 
 
