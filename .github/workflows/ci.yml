@@ -18,7 +18,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install poetry
-        run: pipx install poetry
+        run: pip install poetry
 
       - name: Determine dependencies
         run: poetry lock
@@ -45,7 +45,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install poetry
-        run: pipx install poetry
+        run: pip install poetry
 
       - name: Determine dependencies
         run: poetry lock
@@ -71,7 +71,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install poetry
-        run: pipx install poetry
+        run: pip install poetry
 
       - name: Determine dependencies
         run: poetry lock
