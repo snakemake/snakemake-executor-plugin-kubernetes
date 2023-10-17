@@ -1,11 +1,18 @@
+import tempfile
 from typing import Optional
 import snakemake.common.tests
-from snakemake_interface_executor_plugins import ExecutorSettingsBase
+import snakemake.settings
+from snakemake_interface_executor_plugins.settings import ExecutorSettingsBase
 
 from snakemake_executor_plugin_kubernetes import ExecutorSettings
 
 
-class TestWorkflows(snakemake.common.tests.TestWorkflowsBase):
+BUCKET_NAME = "snakemake-testing-kubernetes-%s-bucket" % next(
+    tempfile._get_candidate_names()
+)
+
+
+class TestWorkflows(snakemake.common.tests.TestWorkflowsMinioPlayStorageBase):
     __test__ = True
 
     def get_executor(self) -> str:
@@ -14,9 +21,15 @@ class TestWorkflows(snakemake.common.tests.TestWorkflowsBase):
     def get_executor_settings(self) -> Optional[ExecutorSettingsBase]:
         return ExecutorSettings()
 
-    def get_default_remote_provider(self) -> Optional[str]:
-        # TODO determine what remote provide to use for the testing!
-        return None
+    def get_assume_shared_fs(self) -> bool:
+        return False
 
-    def get_default_remote_prefix(self) -> Optional[str]:
-        return None
+    def get_remote_execution_settings(
+        self,
+    ) -> snakemake.settings.RemoteExecutionSettings:
+        return snakemake.settings.RemoteExecutionSettings(
+            seconds_between_status_checks=1,
+            envvars=self.get_envvars(),
+            # TODO remove once we have switched to stable snakemake for dev
+            container_image="snakemake/snakemake:latest",
+        )

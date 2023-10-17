@@ -6,15 +6,22 @@ import subprocess
 import time
 from typing import List, Generator, Optional
 import uuid
+
+import kubernetes
+import kubernetes.config
+import kubernetes.client
+
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.remote import RemoteExecutor
-from snakemake_interface_executor_plugins import ExecutorSettingsBase, CommonSettings
-from snakemake_interface_executor_plugins.workflow import WorkflowExecutorInterface
-from snakemake_interface_executor_plugins.logging import LoggerExecutorInterface
+from snakemake_interface_executor_plugins.settings import (
+    ExecutorSettingsBase,
+    CommonSettings,
+)
 from snakemake_interface_executor_plugins.jobs import (
-    ExecutorJobInterface,
+    JobExecutorInterface,
 )
 from snakemake_interface_common.exceptions import WorkflowError
+from snakemake_interface_executor_plugins.settings import DeploymentMethod
 
 
 # Optional:
@@ -66,38 +73,18 @@ common_settings = CommonSettings(
     # filesystem (True) or not (False).
     # This is e.g. the case for cloud execution.
     implies_no_shared_fs=True,
+    pass_default_storage_provider_args=True,
+    pass_default_resources_args=True,
+    pass_envvar_declarations_to_cmd=False,
+    auto_deploy_default_storage_provider=True,
 )
 
 
 # Required:
 # Implementation of your executor
 class Executor(RemoteExecutor):
-    def __init__(
-        self,
-        workflow: WorkflowExecutorInterface,
-        logger: LoggerExecutorInterface,
-    ):
-        super().__init__(
-            workflow,
-            logger,
-            # configure behavior of RemoteExecutor below
-            # whether arguments for setting the remote provider shall  be passed to jobs
-            pass_default_remote_provider_args=True,
-            # whether arguments for setting default resources shall be passed to jobs
-            pass_default_resources_args=True,
-            # whether environment variables shall be passed to jobs
-            pass_envvar_declarations_to_cmd=False,
-        )
-        try:
-            from kubernetes import config
-        except ImportError:
-            raise WorkflowError(
-                "The Python 3 package 'kubernetes' "
-                "must be installed to use Kubernetes"
-            )
-        config.load_kube_config()
-
-        import kubernetes
+    def __post_init__(self):
+        kubernetes.config.load_kube_config()
 
         self.k8s_cpu_scalar = self.workflow.executor_settings.cpu_scalar
         self.k8s_service_account_name = (
@@ -106,15 +93,17 @@ class Executor(RemoteExecutor):
         self.kubeapi = kubernetes.client.CoreV1Api()
         self.batchapi = kubernetes.client.BatchV1Api()
         self.namespace = self.workflow.executor_settings.namespace
-        self.envvars = workflow.envvars
+        self.envvars = self.workflow.envvars
         self.secret_files = {}
         self.run_namespace = str(uuid.uuid4())
         self.secret_envvars = {}
         self.register_secret()
+        self.log_path = self.workflow.persistence.aux_path / "kubernetes-logs"
+        self.log_path.mkdir(exist_ok=True, parents=True)
         self.container_image = self.workflow.remote_execution_settings.container_image
-        logger.info(f"Using {self.container_image} for Kubernetes jobs.")
+        self.logger.info(f"Using {self.container_image} for Kubernetes jobs.")
 
-    def run_job(self, job: ExecutorJobInterface):
+    def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
         # You can access the job's resources, etc.
         # via the job object.
@@ -122,8 +111,6 @@ class Executor(RemoteExecutor):
         # self.report_job_submission(job_info).
         # with job_info being of type
         # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
-
-        import kubernetes.client
 
         exec_job = self.format_job_exec(job)
 
@@ -222,7 +209,11 @@ class Executor(RemoteExecutor):
         self.logger.debug(f"k8s pod resources: {container.resources.requests}")
 
         # capabilities
-        if job.needs_singularity and self.workflow.deployment_settings.use_singularity:
+        if (
+            job.is_containerized
+            and DeploymentMethod.APPTAINER
+            in self.workflow.deployment_settings.deployment_method
+        ):
             # TODO this should work, but it doesn't currently because of
             # missing loop devices
             # singularity inside docker requires SYS_ADMIN capabilities
@@ -275,7 +266,6 @@ class Executor(RemoteExecutor):
 
         for j in active_jobs:
             async with self.status_rate_limiter:
-                self.logger.debug(f"Checking status for pod {j.external_jobid}")
                 try:
                     res = self._kubernetes_retry(
                         lambda: self.kubeapi.read_namespaced_pod_status(
@@ -295,7 +285,7 @@ class Executor(RemoteExecutor):
 
                 if res is None:
                     msg = (
-                        "Unknown pod {jobid}. " "Has the pod been deleted " "manually?"
+                        "Unknown pod {jobid}. Has the pod been deleted manually?"
                     ).format(jobid=j.external_jobid)
                     self.report_job_error(j, msg=msg)
                 elif res.status.phase == "Failed":
@@ -305,13 +295,21 @@ class Executor(RemoteExecutor):
                         "kubectl logs {jobid}"
                     ).format(jobid=j.external_jobid)
                     # failed
-                    self.report_job_error(j, msg=msg)
+                    kube_log_content = self.kubeapi.read_namespaced_pod_log(
+                        name=j.external_jobid, namespace=self.namespace
+                    )
+                    kube_log = self.log_path / f"{j.external_jobid}.log"
+                    with open(kube_log, "w") as f:
+                        f.write(kube_log_content)
+                    self.report_job_error(j, msg=msg, aux_logs=[str(kube_log)])
                 elif res.status.phase == "Succeeded":
                     # finished
                     self.report_job_success(j)
 
                     self._kubernetes_retry(
-                        lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
+                        lambda: self.safe_delete_pod(
+                            j.external_jobid, ignore_not_found=True
+                        )
                     )
                 else:
                     # still active
@@ -330,7 +328,7 @@ class Executor(RemoteExecutor):
         self.unregister_secret()
         super().shutdown()
 
-    def get_job_exec_prefix(self, job: ExecutorJobInterface):
+    def get_job_exec_prefix(self, job: JobExecutorInterface):
         return "cp -rf /source/. ."
 
     def register_secret(self):
