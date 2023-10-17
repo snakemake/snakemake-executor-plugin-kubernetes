@@ -7,8 +7,8 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-snakemake-interface-common = {git = "https://github.com/snakemake/snakemake-interface-common.git"}
-snakemake-interface-executor-plugins = {git = "https://github.com/snakemake/snakemake-interface-executor-plugins.git"}
+snakemake-interface-common = "^1.13.0"
+snakemake-interface-executor-plugins = "^7.0.0"
 kubernetes = "^27.2.0"
 
 
