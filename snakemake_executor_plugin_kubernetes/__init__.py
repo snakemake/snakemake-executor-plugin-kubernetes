@@ -94,7 +94,6 @@ class Executor(RemoteExecutor):
         self.batchapi = kubernetes.client.BatchV1Api()
         self.namespace = self.workflow.executor_settings.namespace
         self.envvars = self.workflow.envvars
-        self.secret_files = {}
         self.run_namespace = str(uuid.uuid4())
         self.secret_envvars = {}
         self.register_secret()
@@ -153,33 +152,10 @@ class Executor(RemoteExecutor):
         # fail on first error
         body.spec.restart_policy = "Never"
 
-        # source files as a secret volume
-        # we copy these files to the workdir before executing Snakemake
-        too_large = [
-            path
-            for path in self.secret_files.values()
-            if os.path.getsize(path) > 1000000
-        ]
-        if too_large:
-            raise WorkflowError(
-                "The following source files exceed the maximum "
-                "file size (1MB) that can be passed from host to "
-                "kubernetes. These are likely not source code "
-                "files. Consider adding them to your "
-                "remote storage instead or (if software) use "
-                "Conda packages or container images:\n{}".format("\n".join(too_large))
-            )
-        secret_volume = kubernetes.client.V1Volume(name="source")
-        secret_volume.secret = kubernetes.client.V1SecretVolumeSource()
-        secret_volume.secret.secret_name = self.run_namespace
-        secret_volume.secret.items = [
-            kubernetes.client.V1KeyToPath(key=key, path=path)
-            for key, path in self.secret_files.items()
-        ]
         # workdir as an emptyDir volume of undefined size
         workdir_volume = kubernetes.client.V1Volume(name="workdir")
         workdir_volume.empty_dir = kubernetes.client.V1EmptyDirVolumeSource()
-        body.spec.volumes = [secret_volume, workdir_volume]
+        body.spec.volumes = [workdir_volume]
 
         # env vars
         container.env = []
@@ -340,51 +316,6 @@ class Executor(RemoteExecutor):
         secret.metadata.name = self.run_namespace
         secret.type = "Opaque"
         secret.data = {}
-        for i, f in enumerate(self.dag.get_sources()):
-            if f.startswith(".."):
-                self.logger.warning(
-                    "Ignoring source file {}. Only files relative "
-                    "to the working directory are allowed.".format(f)
-                )
-                continue
-
-            # The kubernetes API can't create secret files larger than 1MB.
-            source_file_size = os.path.getsize(f)
-            max_file_size = 1048576
-            if source_file_size > max_file_size:
-                self.logger.warning(
-                    "Skipping the source file {f}. Its size {source_file_size} exceeds "
-                    "the maximum file size (1MB) that can be passed "
-                    "from host to kubernetes.".format(
-                        f=f, source_file_size=source_file_size
-                    )
-                )
-                continue
-
-            with open(f, "br") as content:
-                key = f"f{i}"
-
-                # Some files are smaller than 1MB, but grows larger after being
-                # base64 encoded.
-                # We should exclude them as well, otherwise Kubernetes APIs will
-                # complain.
-                encoded_contents = base64.b64encode(content.read()).decode()
-                encoded_size = len(encoded_contents)
-                if encoded_size > 1048576:
-                    self.logger.warning(
-                        "Skipping the source file {f} for secret key {key}. "
-                        "Its base64 encoded size {encoded_size} exceeds "
-                        "the maximum file size (1MB) that can be passed "
-                        "from host to kubernetes.".format(
-                            f=f,
-                            key=key,
-                            encoded_size=encoded_size,
-                        )
-                    )
-                    continue
-
-                self.secret_files[key] = f
-                secret.data[key] = encoded_contents
 
         for e in self.envvars:
             try:
@@ -395,28 +326,12 @@ class Executor(RemoteExecutor):
                 continue
 
         # Test if the total size of the configMap exceeds 1MB
-        config_map_size = sum(
-            [len(base64.b64decode(v)) for k, v in secret.data.items()]
-        )
+        config_map_size = sum(len(base64.b64decode(v)) for k, v in secret.data.items())
         if config_map_size > 1048576:
-            self.logger.warning(
+            raise WorkflowError(
                 "The total size of the included files and other Kubernetes secrets "
                 "is {}, exceeding the 1MB limit.\n".format(config_map_size)
             )
-            self.logger.warning(
-                "The following are the largest files. Consider removing some of them "
-                "(you need remove at least {} bytes):".format(config_map_size - 1048576)
-            )
-
-            entry_sizes = {
-                self.secret_files[k]: len(base64.b64decode(v))
-                for k, v in secret.data.items()
-                if k in self.secret_files
-            }
-            for k, v in sorted(entry_sizes.items(), key=lambda item: item[1])[:-6:-1]:
-                self.logger.warning(f"  * File: {k}, original size: {v}")
-
-            raise WorkflowError("ConfigMap too large")
 
         self.kubeapi.create_namespaced_secret(self.namespace, secret)
 
