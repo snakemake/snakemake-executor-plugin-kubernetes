@@ -113,6 +113,7 @@ class Executor(RemoteExecutor):
         # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
 
         exec_job = self.format_job_exec(job)
+        self.logger.debug(f"Executing job: {exec_job}")
 
         # Kubernetes silently does not submit a job if the name is too long
         # therefore, we ensure that it is not longer than snakejob+uuid.
