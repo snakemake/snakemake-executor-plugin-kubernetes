@@ -93,7 +93,7 @@ class Executor(RemoteExecutor):
         self.kubeapi = kubernetes.client.CoreV1Api()
         self.batchapi = kubernetes.client.BatchV1Api()
         self.namespace = self.workflow.executor_settings.namespace
-        self.envvars = self.workflow.envvars
+        self.envvars = self.workflow.spawned_job_args_factory.envvars()
         self.secret_files = {}
         self.run_namespace = str(uuid.uuid4())
         self.secret_envvars = {}
