@@ -263,8 +263,8 @@ class Executor(RemoteExecutor):
         #
         # async with self.status_rate_limiter:
         #    # query remote middleware here
-        import kubernetes
 
+        self.logger.debug(f"Checking status of {len(active_jobs)} jobs")
         for j in active_jobs:
             async with self.status_rate_limiter:
                 try:
