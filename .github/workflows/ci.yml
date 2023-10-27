@@ -90,7 +90,7 @@ jobs:
         uses: medyagh/setup-minikube@v0.0.14
 
       - name: Run pytest
-        run: poetry run coverage run -m pytest tests/tests.py
+        run: poetry run coverage run -m pytest tests/tests.py -sv
 
       - name: Run Coverage
         run: poetry run coverage report -m
