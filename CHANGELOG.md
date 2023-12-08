@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.1.3...v0.1.4) (2023-12-08)
+
+
+### Documentation
+
+* update metadata ([c6cabd4](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/c6cabd4e70bcb029f809c38434e9d74eea6b87ac))
+
 ## [0.1.3](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.1.2...v0.1.3) (2023-11-20)
 
 
