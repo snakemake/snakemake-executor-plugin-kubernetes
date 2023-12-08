@@ -113,7 +113,6 @@ class Executor(RemoteExecutor):
         # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
 
         exec_job = self.format_job_exec(job)
-        exec_job = "echo $SNAKEMAKE_STORAGE_S3_SECRET_KEY && " + exec_job
         self.logger.debug(f"Executing job: {exec_job}")
 
         # Kubernetes silently does not submit a job if the name is too long
