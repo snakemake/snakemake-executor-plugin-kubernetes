@@ -57,6 +57,21 @@ class ExecutorSettings(ExecutorSettingsBase):
             "when using Google Cloud GKE Autopilot."
         },
     )
+    privileged: Optional[bool] = field(
+        default=False,
+        init=False,
+        metadata={
+            "help": "This creates a privileged container which allows to"
+            "mount storage inside the running container."
+        },
+    )
+    persistent_volume_claim_name: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Mount the PVC with said name inside container in"
+            "`default_remote_prefix` location"
+        },
+    )
 
 
 # Required:
@@ -101,6 +116,8 @@ class Executor(RemoteExecutor):
         self.log_path = self.workflow.persistence.aux_path / "kubernetes-logs"
         self.log_path.mkdir(exist_ok=True, parents=True)
         self.container_image = self.workflow.remote_execution_settings.container_image
+        self.privileged = self.workflow.executor_settings.privileged
+        self.persistent_volume_claim_name = self.workflow.executor_settings.persistent_volume_claim_name
         self.logger.info(f"Using {self.container_image} for Kubernetes jobs.")
 
     def run_job(self, job: JobExecutorInterface):
@@ -135,6 +152,12 @@ class Executor(RemoteExecutor):
         container.volume_mounts = [
             kubernetes.client.V1VolumeMount(name="workdir", mount_path="/workdir"),
         ]
+        if self.persistent_volume_claim_name:
+            assert hasattr(self.workflow, "default_remote_prefix"), f"Kubernetes persistent_volume_claim_name requires default_remote_prefix to be set"
+            assert self.workflow.default_remote_prefix is not None, f"Kubernetes persistent_volume_claim_name requires default_remote_prefix to be not empty"
+            container.volume_mounts.append(
+                kubernetes.client.V1VolumeMount(name= "pvc", mount_path = self.workflow.default_remote_prefix)
+            )
 
         node_selector = {}
         if "machine_type" in job.resources.keys():
@@ -156,6 +179,11 @@ class Executor(RemoteExecutor):
         workdir_volume = kubernetes.client.V1Volume(name="workdir")
         workdir_volume.empty_dir = kubernetes.client.V1EmptyDirVolumeSource()
         body.spec.volumes = [workdir_volume]
+
+        if self.persistent_volume_claim_name:
+            pvc_volume = kubernetes.client.V1Volume(name="pvc")
+            pvc_volume.persistent_volume_claim = kubernetes.client.V1PersistentVolumeClaimVolumeSource(claim_name=self.persistent_volume_claim_name)
+            body.spec.volumes.append( pvc_volume )
 
         # env vars
         container.env = []
@@ -181,6 +209,12 @@ class Executor(RemoteExecutor):
         if "disk_mb" in job.resources.keys():
             disk_mb = int(job.resources.get("disk_mb", 1024))
             container.resources.requests["ephemeral-storage"] = f"{disk_mb}M"
+
+        if self.privileged:
+        # allow privileged container so NFS can be used
+            container.security_context = kubernetes.client.V1SecurityContext(
+                privileged=True
+            )
 
         self.logger.debug(f"k8s pod resources: {container.resources.requests}")
 
