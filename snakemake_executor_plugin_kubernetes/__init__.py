@@ -61,15 +61,21 @@ class ExecutorSettings(ExecutorSettingsBase):
         default=False,
         init=False,
         metadata={
-            "help": "This creates a privileged container which allows to"
+            "help": "This creates a privileged container which allows to "
             "mount storage inside the running container."
         },
     )
     persistent_volume_claim_name: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Mount the PVC with said name inside container in"
+            "help": "Mount the PVC with said name inside container in "
             "`default_remote_prefix` location"
+        },
+    )
+    persistent_volume_claim_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Mount the PVC inside container in this location"
         },
     )
 
@@ -118,6 +124,7 @@ class Executor(RemoteExecutor):
         self.container_image = self.workflow.remote_execution_settings.container_image
         self.privileged = self.workflow.executor_settings.privileged
         self.persistent_volume_claim_name = self.workflow.executor_settings.persistent_volume_claim_name
+        self.persistent_volume_claim_path = self.workflow.executor_settings.persistent_volume_claim_path
         self.logger.info(f"Using {self.container_image} for Kubernetes jobs.")
 
     def run_job(self, job: JobExecutorInterface):
@@ -153,11 +160,12 @@ class Executor(RemoteExecutor):
             kubernetes.client.V1VolumeMount(name="workdir", mount_path="/workdir"),
         ]
         if self.persistent_volume_claim_name:
-            assert hasattr(self.workflow, "default_remote_prefix"), f"Kubernetes persistent_volume_claim_name requires default_remote_prefix to be set"
-            assert self.workflow.default_remote_prefix is not None, f"Kubernetes persistent_volume_claim_name requires default_remote_prefix to be not empty"
+            assert self.persistent_volume_claim_path, f"Persistent Volume Claim Path cannot be empty when Persistent Volume Claim Name is set"
             container.volume_mounts.append(
-                kubernetes.client.V1VolumeMount(name= "pvc", mount_path = self.workflow.default_remote_prefix)
+                kubernetes.client.V1VolumeMount(name= "pvc", mount_path = self.persistent_volume_claim_path)
             )
+        else:
+            assert not self.persistent_volume_claim_path, f"Persistent Volume Claim Path cannnot be set when Persistent Volume Claim Name is empty"
 
         node_selector = {}
         if "machine_type" in job.resources.keys():
@@ -211,7 +219,7 @@ class Executor(RemoteExecutor):
             container.resources.requests["ephemeral-storage"] = f"{disk_mb}M"
 
         if self.privileged:
-        # allow privileged container so NFS can be used
+            # allow privileged container so NFS can be used
             container.security_context = kubernetes.client.V1SecurityContext(
                 privileged=True
             )
