@@ -59,7 +59,6 @@ class ExecutorSettings(ExecutorSettingsBase):
     )
     privileged: Optional[bool] = field(
         default=False,
-        init=False,
         metadata={
             "help": "This creates a privileged container which allows to "
             "mount storage inside the running container."
@@ -69,7 +68,7 @@ class ExecutorSettings(ExecutorSettingsBase):
         default=None,
         metadata={
             "help": "Mount the PVC with said name inside container in "
-            "`default_remote_prefix` location"
+            "`persistent_volume_claim_path` location"
         },
     )
     persistent_volume_claim_path: Optional[str] = field(
