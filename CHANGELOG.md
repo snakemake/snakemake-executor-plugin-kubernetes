@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.5](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.1.4...v0.1.5) (2024-03-12)
+
+
+### Bug Fixes
+
+* Allow kubernetes versions 28 and 29 ([#10](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/10)) ([47a5f37](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/47a5f375de532aa2b83712cedd311a8c978e3798))
+* update snakemake-interface-executor-plugins requirement from ^8.0.2 to &gt;=9.0.0,&lt;10.0.0 ([#12](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/12)) ([861c44f](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/861c44f3c0a9e2eb1861beb4b0dcea1f02180ccc))
+
 ## [0.1.4](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.1.3...v0.1.4) (2023-12-08)
 
 
