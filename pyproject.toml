@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "snakemake-executor-plugin-kubernetes"
-version = "0.1.4"
+version = "0.1.5"
 description = "A snakemake executor plugin for submission of jobs to Kubernetes"
 authors = ["Johannes Koester <johannes.koester@uni-due.de>"]
 readme = "README.md"
