@@ -16,7 +16,7 @@ snakemake-interface-executor-plugins = ">=9.0.0,<10.0.0"
 kubernetes = ">=27.2.0,<30"
 
 [tool.poetry.group.dev.dependencies]
-black = "^23.7.0"
+black = ">=23.7,<25.0"
 flake8 = "^6.1.0"
 coverage = "^7.3.1"
 pytest = "^7.4.1"
