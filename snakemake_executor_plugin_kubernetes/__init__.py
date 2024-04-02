@@ -87,7 +87,7 @@ class Executor(RemoteExecutor):
         try:
             kubernetes.config.load_kube_config()
         except kubernetes.config.config_exception.ConfigException:
-            config.load_incluster_config()
+            kubernetes.config.load_incluster_config()
 
         self.k8s_cpu_scalar = self.workflow.executor_settings.cpu_scalar
         self.k8s_service_account_name = (
