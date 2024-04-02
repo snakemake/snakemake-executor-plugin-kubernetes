@@ -84,7 +84,10 @@ common_settings = CommonSettings(
 # Implementation of your executor
 class Executor(RemoteExecutor):
     def __post_init__(self):
-        kubernetes.config.load_kube_config()
+        try:
+            kubernetes.config.load_kube_config()
+        except kubernetes.config.config_exception.ConfigException:
+            config.load_incluster_config()
 
         self.k8s_cpu_scalar = self.workflow.executor_settings.cpu_scalar
         self.k8s_service_account_name = (
