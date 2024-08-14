@@ -74,9 +74,7 @@ class ExecutorSettings(ExecutorSettingsBase):
     )
     privileged: Optional[bool] = field(
         default=False,
-        metadata={
-            "help": "Create privileged containers for jobs."
-        },
+        metadata={"help": "Create privileged containers for jobs."},
     )
     persistent_volumes: List[PersistentVolume] = field(
         default_factory=list,
