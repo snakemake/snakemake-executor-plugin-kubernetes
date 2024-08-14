@@ -29,17 +29,26 @@ class PersistentVolume:
     name: str
     path: Path
 
-    def parse(self, arg: str) -> Self:
+    @classmethod
+    def parse(cls, arg: str) -> Self:
         spec = arg.split(":")
         if len(spec) != 2:
             raise WorkflowError(
                 f"Invalid persistent volume spec ({arg}), has to be <name>:<path>."
             )
         name, path = spec
-        return PersistentVolume(name=name, path=Path(path))
+        return cls(name=name, path=Path(path))
 
     def unparse(self) -> str:
         return f"{self.name}:{self.path}"
+
+
+def parse_persistent_volumes(args: List[str]) -> List[PersistentVolume]:
+    return [PersistentVolume.parse(arg) for arg in args]
+
+
+def unparse_persistent_volumes(args: List[PersistentVolume]) -> List[str]:
+    return [arg.unparse() for arg in args]
 
 
 @dataclass
@@ -81,8 +90,9 @@ class ExecutorSettings(ExecutorSettingsBase):
         metadata={
             "help": "Mount the given persistent volumes under the given paths in each "
             "job container (<name>:<path>). ",
-            "parse_func": PersistentVolume.parse,
-            "unparse_func": PersistentVolume.unparse,
+            "parse_func": parse_persistent_volumes,
+            "unparse_func": unparse_persistent_volumes,
+            "nargs": "+",
         },
     )
 
@@ -171,7 +181,7 @@ class Executor(RemoteExecutor):
         ]
         for pvc in self.persistent_volumes:
             container.volume_mounts.append(
-                kubernetes.client.V1VolumeMount(name=pvc.name, mount_path=pvc.path)
+                kubernetes.client.V1VolumeMount(name=pvc.name, mount_path=str(pvc.path))
             )
 
         node_selector = {}

@@ -11,7 +11,7 @@ keywords = ["snakemake", "plugin", "executor", "cloud", "kubernetes"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-snakemake-interface-common = "^1.14.1"
+snakemake-interface-common = "^1.17.3"
 snakemake-interface-executor-plugins = ">=9.0.0,<10.0.0"
 kubernetes = ">=27.2.0,<30"
 
