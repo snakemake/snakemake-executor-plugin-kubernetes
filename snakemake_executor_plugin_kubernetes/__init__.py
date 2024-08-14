@@ -80,7 +80,7 @@ class ExecutorSettings(ExecutorSettingsBase):
         },
     )
     persistent_volumes: List[PersistentVolume] = field(
-        default=None,
+        default_factory=list,
         metadata={
             "help": "Mount the given persistent volumes under the given paths in each "
             "job container (<name>:<path>). ",
