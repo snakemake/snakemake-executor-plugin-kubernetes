@@ -75,8 +75,7 @@ class ExecutorSettings(ExecutorSettingsBase):
     privileged: Optional[bool] = field(
         default=False,
         metadata={
-            "help": "This creates a privileged container which allows to "
-            "mount storage inside the running container."
+            "help": "Create privileged containers for jobs."
         },
     )
     persistent_volumes: List[PersistentVolume] = field(
