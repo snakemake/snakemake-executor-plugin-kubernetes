@@ -1,9 +1,10 @@
 import base64
 from dataclasses import dataclass, field
+from pathlib import Path
 import shlex
 import subprocess
 import time
-from typing import List, Generator, Optional
+from typing import List, Generator, Optional, Self
 import uuid
 
 import kubernetes
@@ -23,10 +24,24 @@ from snakemake_interface_common.exceptions import WorkflowError
 from snakemake_interface_executor_plugins.settings import DeploymentMethod
 
 
-# Optional:
-# define additional settings for your executor
-# They will occur in the Snakemake CLI as --<executor-name>-<param-name>
-# Omit this class if you don't need any.
+@dataclass
+class PersistentVolume:
+    name: str
+    path: Path
+
+    def parse(self, arg: str) -> Self:
+        spec = arg.split(":")
+        if len(spec) != 2:
+            raise WorkflowError(
+                f"Invalid persistent volume spec ({arg}), has to be <name>:<path>."
+            )
+        name, path = spec
+        return PersistentVolume(name=name, path=Path(path))
+
+    def unparse(self) -> str:
+        return f"{self.name}:{self.path}"
+
+
 @dataclass
 class ExecutorSettings(ExecutorSettingsBase):
     namespace: str = field(
@@ -64,17 +79,13 @@ class ExecutorSettings(ExecutorSettingsBase):
             "mount storage inside the running container."
         },
     )
-    persistent_volume_claim_name: Optional[str] = field(
+    persistent_volumes: List[PersistentVolume] = field(
         default=None,
         metadata={
-            "help": "Mount the PVC with said name inside container in "
-            "`persistent_volume_claim_path` location"
-        },
-    )
-    persistent_volume_claim_path: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "Mount the PVC inside container in this location"
+            "help": "Mount the given persistent volumes under the given paths in each "
+            "job container (<name>:<path>). ",
+            "parse_func": PersistentVolume.parse,
+            "unparse_func": PersistentVolume.unparse,
         },
     )
 
@@ -125,8 +136,8 @@ class Executor(RemoteExecutor):
         self.log_path.mkdir(exist_ok=True, parents=True)
         self.container_image = self.workflow.remote_execution_settings.container_image
         self.privileged = self.workflow.executor_settings.privileged
-        self.persistent_volume_claim_name = self.workflow.executor_settings.persistent_volume_claim_name
-        self.persistent_volume_claim_path = self.workflow.executor_settings.persistent_volume_claim_path
+        self.persistent_volumes = self.workflow.executor_settings.persistent_volumes
+
         self.logger.info(f"Using {self.container_image} for Kubernetes jobs.")
 
     def run_job(self, job: JobExecutorInterface):
@@ -161,13 +172,10 @@ class Executor(RemoteExecutor):
         container.volume_mounts = [
             kubernetes.client.V1VolumeMount(name="workdir", mount_path="/workdir"),
         ]
-        if self.persistent_volume_claim_name:
-            assert self.persistent_volume_claim_path, f"Persistent Volume Claim Path cannot be empty when Persistent Volume Claim Name is set"
+        for pvc in self.persistent_volumes:
             container.volume_mounts.append(
-                kubernetes.client.V1VolumeMount(name= "pvc", mount_path = self.persistent_volume_claim_path)
+                kubernetes.client.V1VolumeMount(name=pvc.name, mount_path=pvc.path)
             )
-        else:
-            assert not self.persistent_volume_claim_path, f"Persistent Volume Claim Path cannnot be set when Persistent Volume Claim Name is empty"
 
         node_selector = {}
         if "machine_type" in job.resources.keys():
@@ -190,10 +198,14 @@ class Executor(RemoteExecutor):
         workdir_volume.empty_dir = kubernetes.client.V1EmptyDirVolumeSource()
         body.spec.volumes = [workdir_volume]
 
-        if self.persistent_volume_claim_name:
-            pvc_volume = kubernetes.client.V1Volume(name="pvc")
-            pvc_volume.persistent_volume_claim = kubernetes.client.V1PersistentVolumeClaimVolumeSource(claim_name=self.persistent_volume_claim_name)
-            body.spec.volumes.append( pvc_volume )
+        for pvc in self.persistent_volumes:
+            volume = kubernetes.client.V1Volume(name=pvc.name)
+            volume.persistent_volume_claim = (
+                kubernetes.client.V1PersistentVolumeClaimVolumeSource(
+                    claim_name=pvc.name
+                )
+            )
+            body.spec.volumes.append(volume)
 
         # env vars
         container.env = []
