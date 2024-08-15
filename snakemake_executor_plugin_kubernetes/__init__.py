@@ -1,9 +1,10 @@
 import base64
 from dataclasses import dataclass, field
+from pathlib import Path
 import shlex
 import subprocess
 import time
-from typing import List, Generator, Optional
+from typing import List, Generator, Optional, Self
 import uuid
 
 import kubernetes
@@ -23,10 +24,33 @@ from snakemake_interface_common.exceptions import WorkflowError
 from snakemake_interface_executor_plugins.settings import DeploymentMethod
 
 
-# Optional:
-# define additional settings for your executor
-# They will occur in the Snakemake CLI as --<executor-name>-<param-name>
-# Omit this class if you don't need any.
+@dataclass
+class PersistentVolume:
+    name: str
+    path: Path
+
+    @classmethod
+    def parse(cls, arg: str) -> Self:
+        spec = arg.split(":")
+        if len(spec) != 2:
+            raise WorkflowError(
+                f"Invalid persistent volume spec ({arg}), has to be <name>:<path>."
+            )
+        name, path = spec
+        return cls(name=name, path=Path(path))
+
+    def unparse(self) -> str:
+        return f"{self.name}:{self.path}"
+
+
+def parse_persistent_volumes(args: List[str]) -> List[PersistentVolume]:
+    return [PersistentVolume.parse(arg) for arg in args]
+
+
+def unparse_persistent_volumes(args: List[PersistentVolume]) -> List[str]:
+    return [arg.unparse() for arg in args]
+
+
 @dataclass
 class ExecutorSettings(ExecutorSettingsBase):
     namespace: str = field(
@@ -55,6 +79,20 @@ class ExecutorSettings(ExecutorSettingsBase):
             "pod specs. This is e.g. needed when using workload "
             "identity which is enforced "
             "when using Google Cloud GKE Autopilot."
+        },
+    )
+    privileged: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Create privileged containers for jobs."},
+    )
+    persistent_volumes: List[PersistentVolume] = field(
+        default_factory=list,
+        metadata={
+            "help": "Mount the given persistent volumes under the given paths in each "
+            "job container (<name>:<path>). ",
+            "parse_func": parse_persistent_volumes,
+            "unparse_func": unparse_persistent_volumes,
+            "nargs": "+",
         },
     )
 
@@ -104,6 +142,9 @@ class Executor(RemoteExecutor):
         self.log_path = self.workflow.persistence.aux_path / "kubernetes-logs"
         self.log_path.mkdir(exist_ok=True, parents=True)
         self.container_image = self.workflow.remote_execution_settings.container_image
+        self.privileged = self.workflow.executor_settings.privileged
+        self.persistent_volumes = self.workflow.executor_settings.persistent_volumes
+
         self.logger.info(f"Using {self.container_image} for Kubernetes jobs.")
 
     def run_job(self, job: JobExecutorInterface):
@@ -138,6 +179,10 @@ class Executor(RemoteExecutor):
         container.volume_mounts = [
             kubernetes.client.V1VolumeMount(name="workdir", mount_path="/workdir"),
         ]
+        for pvc in self.persistent_volumes:
+            container.volume_mounts.append(
+                kubernetes.client.V1VolumeMount(name=pvc.name, mount_path=str(pvc.path))
+            )
 
         node_selector = {}
         if "machine_type" in job.resources.keys():
@@ -159,6 +204,15 @@ class Executor(RemoteExecutor):
         workdir_volume = kubernetes.client.V1Volume(name="workdir")
         workdir_volume.empty_dir = kubernetes.client.V1EmptyDirVolumeSource()
         body.spec.volumes = [workdir_volume]
+
+        for pvc in self.persistent_volumes:
+            volume = kubernetes.client.V1Volume(name=pvc.name)
+            volume.persistent_volume_claim = (
+                kubernetes.client.V1PersistentVolumeClaimVolumeSource(
+                    claim_name=pvc.name
+                )
+            )
+            body.spec.volumes.append(volume)
 
         # env vars
         container.env = []
@@ -184,6 +238,12 @@ class Executor(RemoteExecutor):
         if "disk_mb" in job.resources.keys():
             disk_mb = int(job.resources.get("disk_mb", 1024))
             container.resources.requests["ephemeral-storage"] = f"{disk_mb}M"
+
+        if self.privileged:
+            # allow privileged container so NFS can be used
+            container.security_context = kubernetes.client.V1SecurityContext(
+                privileged=True
+            )
 
         self.logger.debug(f"k8s pod resources: {container.resources.requests}")
 
