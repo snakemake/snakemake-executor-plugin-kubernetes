@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.1.5...v0.2.0) (2024-08-15)
+
+
+### Features
+
+* PVC support for kubernetes (continuation of [#9](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/9)) ([#22](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/22)) ([33a6809](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/33a680905866e197d2a8bcc5d1600827a4f77740))
+
+
+### Bug Fixes
+
+* handle cases when running inside a kubernetes cluster ([#17](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/17)) ([a031314](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/a0313140a24f72fc1c3a89e4eeea161f14dec1a2))
+
 ## [0.1.5](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.1.4...v0.1.5) (2024-03-12)
 
 
