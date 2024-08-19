@@ -109,7 +109,7 @@ common_settings = CommonSettings(
     # Define whether your executor plugin implies that there is no shared
     # filesystem (True) or not (False).
     # This is e.g. the case for cloud execution.
-    implies_no_shared_fs=True,
+    implies_no_shared_fs=False,
     job_deploy_sources=True,
     pass_default_storage_provider_args=True,
     pass_default_resources_args=True,
