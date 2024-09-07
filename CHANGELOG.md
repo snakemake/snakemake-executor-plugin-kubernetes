@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.2.0...v0.2.1) (2024-09-07)
+
+
+### Performance Improvements
+
+* update kubernetes requirement from &gt;=27.2.0,&lt;30 to >=27.2.0,<31 ([#20](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/20)) ([046d06f](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/046d06f03a16e88e95e1a62f1632f4baca13bcc5))
+
 ## [0.2.0](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.1.5...v0.2.0) (2024-08-15)
 
 
