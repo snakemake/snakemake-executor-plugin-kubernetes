@@ -13,7 +13,7 @@ keywords = ["snakemake", "plugin", "executor", "cloud", "kubernetes"]
 python = "^3.11"
 snakemake-interface-common = "^1.17.3"
 snakemake-interface-executor-plugins = ">=9.0.0,<10.0.0"
-kubernetes = ">=27.2.0,<30"
+kubernetes = ">=27.2.0,<31"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
