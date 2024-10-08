@@ -134,7 +134,6 @@ class Executor(RemoteExecutor):
         self.kubeapi = kubernetes.client.CoreV1Api()
         self.batchapi = kubernetes.client.BatchV1Api()
         self.namespace = self.workflow.executor_settings.namespace
-        self.envvars = self.workflow.spawned_job_args_factory.envvars()
         self.secret_files = {}
         self.run_namespace = str(uuid.uuid4())
         self.secret_envvars = {}
@@ -377,7 +376,7 @@ class Executor(RemoteExecutor):
         secret.type = "Opaque"
         secret.data = {}
 
-        for name, value in self.envvars.items():
+        for name, value in self.envvars().items():
             key = name.lower()
             secret.data[key] = base64.b64encode(value.encode()).decode()
             self.secret_envvars[key] = name
