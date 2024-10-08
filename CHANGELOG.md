@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.2.1...v0.2.2) (2024-10-08)
+
+
+### Bug Fixes
+
+* [#27](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/27) attribute overwriting envvars method in `RealExecutor` ([#28](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/28)) ([d6c0bd5](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/d6c0bd5afd4f64ce7ced4ea2217b216a71f7ae94))
+
 ## [0.2.1](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.2.0...v0.2.1) (2024-09-07)
 
 
