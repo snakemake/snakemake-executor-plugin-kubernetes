@@ -96,10 +96,18 @@ class ExecutorSettings(ExecutorSettingsBase):
         },
     )
 
-
+# Required:
 # Specify common settings shared by various executors.
 common_settings = CommonSettings(
+    # define whether your executor plugin executes locally
+    # or remotely. In virtually all cases, it will be remote execution
+    # (cluster, cloud, etc.). Only Snakemake's standard execution
+    # plugins (snakemake-executor-plugin-dryrun, snakemake-executor-plugin-local)
+    # are expected to specify False here.
     non_local_exec=True,
+    # Define whether your executor plugin implies that there is no shared
+    # filesystem (True) or not (False).
+    # This is e.g. the case for cloud execution.
     implies_no_shared_fs=True,
     job_deploy_sources=True,
     pass_default_storage_provider_args=True,
@@ -108,7 +116,8 @@ common_settings = CommonSettings(
     auto_deploy_default_storage_provider=True,
 )
 
-
+# Required:
+# Implementation of your executor
 class Executor(RemoteExecutor):
     def __post_init__(self):
         try:
@@ -136,6 +145,14 @@ class Executor(RemoteExecutor):
         self.logger.info(f"Using {self.container_image} for Kubernetes jobs.")
 
     def run_job(self, job: JobExecutorInterface):
+        # Implement here how to run a job.
+        # You can access the job's resources, etc.
+        # via the job object.
+        # After submitting the job, you have to call
+        # self.report_job_submission(job_info).
+        # with job_info being of type
+        # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
+
         exec_job = self.format_job_exec(job)
         self.logger.debug(f"Executing job: {exec_job}")
 
@@ -260,6 +277,7 @@ class Executor(RemoteExecutor):
 
         # Privileged mode
         if self.privileged:
+            # allow privileged container so NFS can be used
             container.security_context = kubernetes.client.V1SecurityContext(
                 privileged=True
             )
