@@ -191,7 +191,7 @@ class Executor(RemoteExecutor):
 
         # Add node selector and toleration for GPU nodes if GPU is requested
         if 'gpu' in job.resources:
-            node_selector["accelerator"] = "nvidia"
+            node_selector["nvidia.com/gpu"] = "present"
             self.logger.debug(f"GPU requested; updated node selector: {node_selector}")
 
         # Initialize PodSpec
