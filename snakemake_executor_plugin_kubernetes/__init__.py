@@ -205,11 +205,11 @@ class Executor(RemoteExecutor):
         # Add toleration for GPU nodes if GPU is requested
         if "gpu" in resources_dict:
             # Manufacturer logic
-            manufacturer = resources_dict.get("manufacturer", None)
+            manufacturer = resources_dict.get("gpu_manufacturer", None)
             if not manufacturer:
                 raise WorkflowError(
                     "GPU requested but no manufacturer set. "
-                    "Use manufacturer='nvidia' or 'amd'."
+                    "Use gpu_manufacturer='nvidia' or 'amd'."
                 )
             manufacturer_lc = manufacturer.lower()
             if manufacturer_lc == "nvidia":
