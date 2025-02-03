@@ -190,11 +190,6 @@ class Executor(RemoteExecutor):
             node_selector["node.kubernetes.io/instance-type"] = resources_dict["machine_type"]
             self.logger.debug(f"Set node selector for machine type: {node_selector}")
 
-        # Add node selector for GPU if requested
-        if "gpu" in resources_dict:
-            node_selector["accelerator"] = "nvidia"
-            self.logger.debug(f"GPU requested; updated node selector: {node_selector}")
-
         # Initialize PodSpec
         body.spec = kubernetes.client.V1PodSpec(
             containers=[container],
