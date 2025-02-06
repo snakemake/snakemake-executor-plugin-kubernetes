@@ -95,6 +95,8 @@ class ExecutorSettings(ExecutorSettingsBase):
             "nargs": "+",
         },
     )
+
+
 # Required:
 # Specify common settings shared by various executors.
 common_settings = CommonSettings(
@@ -114,6 +116,7 @@ common_settings = CommonSettings(
     pass_envvar_declarations_to_cmd=False,
     auto_deploy_default_storage_provider=True,
 )
+
 
 # Required:
 # Implementation of your executor
@@ -187,7 +190,8 @@ class Executor(RemoteExecutor):
         # Node selector
         node_selector = {}
         if "machine_type" in resources_dict.keys():
-            node_selector["node.kubernetes.io/instance-type"] = resources_dict["machine_type"]
+            node_selector["node.kubernetes.io/instance-type"] = resources_dict[
+                "machine_type"]
             self.logger.debug(f"Set node selector for machine type: {node_selector}")
 
         # Initialize PodSpec
@@ -219,7 +223,9 @@ class Executor(RemoteExecutor):
                         effect="NoSchedule"
                     )
                 )
-                self.logger.debug(f"Added toleration for NVIDIA GPU: {body.spec.tolerations}")
+                self.logger.debug(
+                    f"Added toleration for NVIDIA GPU: {body.spec.tolerations}"
+                )
 
             elif manufacturer_lc == "amd":
                 # Toleration for amd.com/gpu
@@ -233,7 +239,9 @@ class Executor(RemoteExecutor):
                         effect="NoSchedule"
                     )
                 )
-                self.logger.debug(f"Added toleration for AMD GPU: {body.spec.tolerations}")
+                self.logger.debug(
+                    f"Added toleration for AMD GPU: {body.spec.tolerations}"
+                )
 
             else:
                 raise WorkflowError(
@@ -267,7 +275,9 @@ class Executor(RemoteExecutor):
         # Add service account name if provided
         if self.k8s_service_account_name:
             body.spec.service_account_name = self.k8s_service_account_name
-            self.logger.debug(f"Set service account name: {self.k8s_service_account_name}")
+            self.logger.debug(
+                f"Set service account name: {self.k8s_service_account_name}"
+            )
 
         # Workdir volume
         workdir_volume = kubernetes.client.V1Volume(name="workdir")
@@ -297,25 +307,21 @@ class Executor(RemoteExecutor):
         self.logger.debug(f"Job resources: {resources_dict}")
         container.resources = kubernetes.client.V1ResourceRequirements()
         container.resources.requests = {}
-        container.resources.limits = {}
 
         # CPU and memory requests
         cores = resources_dict.get("_cores", 1)
         container.resources.requests["cpu"] = "{}m".format(
             int(cores * self.k8s_cpu_scalar * 1000)
         )
-        container.resources.limits["cpu"] = "{}m".format(int(cores * 1000))
 
         if "mem_mb" in resources_dict:
             mem_mb = resources_dict["mem_mb"]
             container.resources.requests["memory"] = "{}M".format(mem_mb)
-            container.resources.limits["memory"] = "{}M".format(mem_mb)
 
         # Disk
         if "disk_mb" in resources_dict:
             disk_mb = int(resources_dict.get("disk_mb", 1024))
             container.resources.requests["ephemeral-storage"] = f"{disk_mb}M"
-            container.resources.limits["ephemeral-storage"] = f"{disk_mb}M"
 
         # Request GPU resources if specified
         if "gpu" in resources_dict:
@@ -326,17 +332,14 @@ class Executor(RemoteExecutor):
             manufacturer = resources_dict.get("manufacturer", "").lower()
             if manufacturer == "nvidia":
                 container.resources.requests["nvidia.com/gpu"] = gpu_count
-                container.resources.limits["nvidia.com/gpu"] = gpu_count
                 self.logger.debug(f"Requested NVIDIA GPU resources: {gpu_count}")
             elif manufacturer == "amd":
                 container.resources.requests["amd.com/gpu"] = gpu_count
-                container.resources.limits["amd.com/gpu"] = gpu_count
                 self.logger.debug(f"Requested AMD GPU resources: {gpu_count}")
             else:
                 # fallback if we never see a recognized manufacturer
                 # (the code above raises an error first, so we might never get here)
                 container.resources.requests["nvidia.com/gpu"] = gpu_count
-                container.resources.limits["nvidia.com/gpu"] = gpu_count
 
         # Privileged mode
         if self.privileged:
@@ -454,11 +457,12 @@ class Executor(RemoteExecutor):
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
         # Cancel all active jobs.
-        # This method is called when Snakemake is interrupted.
         for j in active_jobs:
-                self._kubernetes_retry(
-                    lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
+            self._kubernetes_retry(
+                lambda: self.safe_delete_pod(
+                    j.external_jobid, ignore_not_found=True
                 )
+            )
 
     def shutdown(self):
         self.unregister_secret()
