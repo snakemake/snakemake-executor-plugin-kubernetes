@@ -1,0 +1,1 @@
+This is the Snakemake executor for [Kubernetes](https://kubernetes.io), allowing to execute Snakemake workflows in a distributed way on a Kubernetes cluster.
