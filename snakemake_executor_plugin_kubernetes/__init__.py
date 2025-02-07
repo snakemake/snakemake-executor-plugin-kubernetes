@@ -191,14 +191,13 @@ class Executor(RemoteExecutor):
         node_selector = {}
         if "machine_type" in resources_dict.keys():
             node_selector["node.kubernetes.io/instance-type"] = resources_dict[
-                "machine_type"]
+                "machine_type"
+            ]
             self.logger.debug(f"Set node selector for machine type: {node_selector}")
 
         # Initialize PodSpec
         body.spec = kubernetes.client.V1PodSpec(
-            containers=[container],
-            node_selector=node_selector,
-            restart_policy="Never"
+            containers=[container], node_selector=node_selector, restart_policy="Never"
         )
 
         # Add toleration for GPU nodes if GPU is requested
@@ -220,7 +219,7 @@ class Executor(RemoteExecutor):
                         key="nvidia.com/gpu",
                         operator="Equal",
                         value="present",
-                        effect="NoSchedule"
+                        effect="NoSchedule",
                     )
                 )
                 self.logger.debug(
@@ -236,7 +235,7 @@ class Executor(RemoteExecutor):
                         key="amd.com/gpu",
                         operator="Equal",
                         value="present",
-                        effect="NoSchedule"
+                        effect="NoSchedule",
                     )
                 )
                 self.logger.debug(
@@ -356,6 +355,7 @@ class Executor(RemoteExecutor):
 
         # Serialize and log the pod specification
         import json
+
         self.logger.debug("Pod specification:")
         self.logger.debug(json.dumps(body.to_dict(), indent=2))
 
@@ -460,9 +460,7 @@ class Executor(RemoteExecutor):
         # Cancel all active jobs.
         for j in active_jobs:
             self._kubernetes_retry(
-                lambda: self.safe_delete_pod(
-                    j.external_jobid, ignore_not_found=True
-                )
+                lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
             )
 
     def shutdown(self):
@@ -524,6 +522,7 @@ class Executor(RemoteExecutor):
 
     def _reauthenticate_and_retry(self, func=None):
         import kubernetes
+
         # Unauthorized.
         # Reload config in order to ensure token is
         # refreshed. Then try again.
