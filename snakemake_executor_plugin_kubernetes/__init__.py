@@ -327,7 +327,7 @@ class Executor(RemoteExecutor):
         if "gpu" in resources_dict:
             gpu_count = str(resources_dict["gpu"])
             # For nvidia, K8s expects nvidia.com/gpu; for amd, we use amd.com/gpu.
-            # But let's keep nvidia.com/gpu 
+            # But let's keep nvidia.com/gpu
             # for both if the cluster doesn't differentiate.
             # If your AMD plugin uses a different name, update accordingly:
             manufacturer = resources_dict.get("manufacturer", "").lower()
