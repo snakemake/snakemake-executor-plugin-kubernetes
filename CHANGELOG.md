@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.2.2...v0.3.0) (2025-02-08)
+
+
+### Features
+
+* Added GPU node pool support for GKE, better logging, error and exception handling  ([#31](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/31)) ([6b1cac9](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/6b1cac9f72302573f30d1c59f8714f2a7e10cb8d))
+
 ## [0.2.2](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.2.1...v0.2.2) (2024-10-08)
 
 
