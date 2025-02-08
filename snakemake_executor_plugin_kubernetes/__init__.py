@@ -122,6 +122,7 @@ common_settings = CommonSettings(
 # Implementation of your executor
 class Executor(RemoteExecutor):
     def __post_init__(self):
+        # Attempt loading kube_config or in-cluster config
         try:
             kubernetes.config.load_kube_config()
         except kubernetes.config.config_exception.ConfigException:
@@ -154,6 +155,8 @@ class Executor(RemoteExecutor):
         # self.report_job_submission(job_info).
         # with job_info being of type
         # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
+        # Convert job.resources to a normal dict first (fix for membership checks).
+        resources_dict = dict(job.resources)
 
         exec_job = self.format_job_exec(job)
         self.logger.debug(f"Executing job: {exec_job}")
@@ -166,10 +169,9 @@ class Executor(RemoteExecutor):
 
         body = kubernetes.client.V1Pod()
         body.metadata = kubernetes.client.V1ObjectMeta(labels={"app": "snakemake"})
-
         body.metadata.name = jobid
 
-        # container
+        # Container setup
         container = kubernetes.client.V1Container(name=jobid)
         container.image = self.container_image
         container.command = shlex.split("/bin/sh")
@@ -178,73 +180,73 @@ class Executor(RemoteExecutor):
         container.volume_mounts = [
             kubernetes.client.V1VolumeMount(name="workdir", mount_path="/workdir"),
         ]
+
+        # Volume mounts
         for pvc in self.persistent_volumes:
             container.volume_mounts.append(
                 kubernetes.client.V1VolumeMount(name=pvc.name, mount_path=str(pvc.path))
             )
 
+        # Node selector
         node_selector = {}
-        if "machine_type" in job.resources.keys():
-            # Kubernetes labels a node by its instance type using this node_label.
-            node_selector["node.kubernetes.io/instance-type"] = job.resources[
+        if "machine_type" in resources_dict.keys():
+            node_selector["node.kubernetes.io/instance-type"] = resources_dict[
                 "machine_type"
             ]
+            self.logger.debug(f"Set node selector for machine type: {node_selector}")
 
+        # Initialize PodSpec
         body.spec = kubernetes.client.V1PodSpec(
-            containers=[container], node_selector=node_selector
+            containers=[container], node_selector=node_selector, restart_policy="Never"
         )
-        # Add service account name if provided
-        if self.k8s_service_account_name:
-            body.spec.service_account_name = self.k8s_service_account_name
 
-        # fail on first error
-        body.spec.restart_policy = "Never"
-
-        workdir_volume = kubernetes.client.V1Volume(name="workdir")
-        workdir_volume.empty_dir = kubernetes.client.V1EmptyDirVolumeSource()
-        body.spec.volumes = [workdir_volume]
-
-        for pvc in self.persistent_volumes:
-            volume = kubernetes.client.V1Volume(name=pvc.name)
-            volume.persistent_volume_claim = (
-                kubernetes.client.V1PersistentVolumeClaimVolumeSource(
-                    claim_name=pvc.name
+        # Add toleration for GPU nodes if GPU is requested
+        if "gpu" in resources_dict:
+            # Manufacturer logic
+            manufacturer = resources_dict.get("gpu_manufacturer", None)
+            if not manufacturer:
+                raise WorkflowError(
+                    "GPU requested but no manufacturer set. "
+                    "Use gpu_manufacturer='nvidia' or 'amd'."
                 )
-            )
-            body.spec.volumes.append(volume)
+            manufacturer_lc = manufacturer.lower()
+            if manufacturer_lc == "nvidia":
+                # Toleration for nvidia.com/gpu
+                if body.spec.tolerations is None:
+                    body.spec.tolerations = []
+                body.spec.tolerations.append(
+                    kubernetes.client.V1Toleration(
+                        key="nvidia.com/gpu",
+                        operator="Equal",
+                        value="present",
+                        effect="NoSchedule",
+                    )
+                )
+                self.logger.debug(
+                    f"Added toleration for NVIDIA GPU: {body.spec.tolerations}"
+                )
 
-        # env vars
-        container.env = []
-        for key, e in self.secret_envvars.items():
-            envvar = kubernetes.client.V1EnvVar(name=e)
-            envvar.value_from = kubernetes.client.V1EnvVarSource()
-            envvar.value_from.secret_key_ref = kubernetes.client.V1SecretKeySelector(
-                key=key, name=self.run_namespace
-            )
-            container.env.append(envvar)
+            elif manufacturer_lc == "amd":
+                # Toleration for amd.com/gpu
+                if body.spec.tolerations is None:
+                    body.spec.tolerations = []
+                body.spec.tolerations.append(
+                    kubernetes.client.V1Toleration(
+                        key="amd.com/gpu",
+                        operator="Equal",
+                        value="present",
+                        effect="NoSchedule",
+                    )
+                )
+                self.logger.debug(
+                    f"Added toleration for AMD GPU: {body.spec.tolerations}"
+                )
 
-        # request resources
-        self.logger.debug(f"job resources:  {dict(job.resources)}")
-        container.resources = kubernetes.client.V1ResourceRequirements()
-        container.resources.requests = {}
-        container.resources.requests["cpu"] = "{}m".format(
-            int(job.resources["_cores"] * self.k8s_cpu_scalar * 1000)
-        )
-        if "mem_mb" in job.resources.keys():
-            container.resources.requests["memory"] = "{}M".format(
-                job.resources["mem_mb"]
-            )
-        if "disk_mb" in job.resources.keys():
-            disk_mb = int(job.resources.get("disk_mb", 1024))
-            container.resources.requests["ephemeral-storage"] = f"{disk_mb}M"
-
-        if self.privileged:
-            # allow privileged container so NFS can be used
-            container.security_context = kubernetes.client.V1SecurityContext(
-                privileged=True
-            )
-
-        self.logger.debug(f"k8s pod resources: {container.resources.requests}")
+            else:
+                raise WorkflowError(
+                    f"Unsupported GPU manufacturer '{manufacturer}'. "
+                    "Must be 'nvidia' or 'amd'."
+                )
 
         # capabilities
         if (
@@ -269,9 +271,102 @@ class Executor(RemoteExecutor):
                 privileged=True
             )
 
-        pod = self._kubernetes_retry(
-            lambda: self.kubeapi.create_namespaced_pod(self.namespace, body)
+        # Add service account name if provided
+        if self.k8s_service_account_name:
+            body.spec.service_account_name = self.k8s_service_account_name
+            self.logger.debug(
+                f"Set service account name: {self.k8s_service_account_name}"
+            )
+
+        # Workdir volume
+        workdir_volume = kubernetes.client.V1Volume(name="workdir")
+        workdir_volume.empty_dir = kubernetes.client.V1EmptyDirVolumeSource()
+        body.spec.volumes = [workdir_volume]
+
+        for pvc in self.persistent_volumes:
+            volume = kubernetes.client.V1Volume(name=pvc.name)
+            volume.persistent_volume_claim = (
+                kubernetes.client.V1PersistentVolumeClaimVolumeSource(
+                    claim_name=pvc.name
+                )
+            )
+            body.spec.volumes.append(volume)
+
+        # Env vars
+        container.env = []
+        for key, e in self.secret_envvars.items():
+            envvar = kubernetes.client.V1EnvVar(name=e)
+            envvar.value_from = kubernetes.client.V1EnvVarSource()
+            envvar.value_from.secret_key_ref = kubernetes.client.V1SecretKeySelector(
+                key=key, name=self.run_namespace
+            )
+            container.env.append(envvar)
+
+        # Request resources
+        self.logger.debug(f"Job resources: {resources_dict}")
+        container.resources = kubernetes.client.V1ResourceRequirements()
+        container.resources.requests = {}
+
+        # CPU and memory requests
+        cores = resources_dict.get("_cores", 1)
+        container.resources.requests["cpu"] = "{}m".format(
+            int(cores * self.k8s_cpu_scalar * 1000)
         )
+
+        if "mem_mb" in resources_dict:
+            mem_mb = resources_dict["mem_mb"]
+            container.resources.requests["memory"] = "{}M".format(mem_mb)
+
+        # Disk
+        if "disk_mb" in resources_dict:
+            disk_mb = int(resources_dict.get("disk_mb", 1024))
+            container.resources.requests["ephemeral-storage"] = f"{disk_mb}M"
+
+        # Request GPU resources if specified
+        if "gpu" in resources_dict:
+            gpu_count = str(resources_dict["gpu"])
+            # For nvidia, K8s expects nvidia.com/gpu; for amd, we use amd.com/gpu.
+            # But let's keep nvidia.com/gpu
+            # for both if the cluster doesn't differentiate.
+            # If your AMD plugin uses a different name, update accordingly:
+            manufacturer = resources_dict.get("manufacturer", "").lower()
+            if manufacturer == "nvidia":
+                container.resources.requests["nvidia.com/gpu"] = gpu_count
+                self.logger.debug(f"Requested NVIDIA GPU resources: {gpu_count}")
+            elif manufacturer == "amd":
+                container.resources.requests["amd.com/gpu"] = gpu_count
+                self.logger.debug(f"Requested AMD GPU resources: {gpu_count}")
+            else:
+                # fallback if we never see a recognized manufacturer
+                # (the code above raises an error first, so we might never get here)
+                container.resources.requests["nvidia.com/gpu"] = gpu_count
+
+        # Privileged mode
+        if self.privileged:
+            container.security_context = kubernetes.client.V1SecurityContext(
+                privileged=True
+            )
+            self.logger.debug("Container set to run in privileged mode.")
+
+        self.logger.debug(f"k8s pod resources: {container.resources}")
+
+        # Assign the modified container back to the spec
+        body.spec.containers = [container]
+
+        # Serialize and log the pod specification
+        import json
+
+        self.logger.debug("Pod specification:")
+        self.logger.debug(json.dumps(body.to_dict(), indent=2))
+
+        # Try creating the pod with exception handling
+        try:
+            pod = self._kubernetes_retry(
+                lambda: self.kubeapi.create_namespaced_pod(self.namespace, body)
+            )
+        except kubernetes.client.rest.ApiException as e:
+            self.logger.error(f"Failed to create pod: {e}")
+            raise WorkflowError(f"Failed to create pod: {e}")
 
         self.logger.info(
             "Get status with:\n"
@@ -300,7 +395,6 @@ class Executor(RemoteExecutor):
         #
         # async with self.status_rate_limiter:
         #    # query remote middleware here
-
         self.logger.debug(f"Checking status of {len(active_jobs)} jobs")
         for j in active_jobs:
             async with self.status_rate_limiter:
@@ -317,7 +411,12 @@ class Executor(RemoteExecutor):
                         # the server.
                         j.callback(j.job)
                         continue
+                    else:
+                        self.logger.error(f"ApiException when checking pod status: {e}")
+                        self.report_job_error(j, msg=str(e))
+                        continue
                 except WorkflowError as e:
+                    self.logger.error(f"WorkflowError when checking pod status: {e}")
                     self.report_job_error(j, msg=str(e))
                     continue
 
@@ -325,6 +424,7 @@ class Executor(RemoteExecutor):
                     msg = (
                         "Unknown pod {jobid}. Has the pod been deleted manually?"
                     ).format(jobid=j.external_jobid)
+                    self.logger.error(msg)
                     self.report_job_error(j, msg=msg)
                 elif res.status.phase == "Failed":
                     msg = (
@@ -339,9 +439,11 @@ class Executor(RemoteExecutor):
                     kube_log = self.log_path / f"{j.external_jobid}.log"
                     with open(kube_log, "w") as f:
                         f.write(kube_log_content)
+                    self.logger.error(f"Job {j.external_jobid} failed. {msg}")
                     self.report_job_error(j, msg=msg, aux_logs=[str(kube_log)])
                 elif res.status.phase == "Succeeded":
                     # finished
+                    self.logger.info(f"Job {j.external_jobid} succeeded.")
                     self.report_job_success(j)
 
                     self._kubernetes_retry(
@@ -351,12 +453,11 @@ class Executor(RemoteExecutor):
                     )
                 else:
                     # still active
+                    self.logger.debug(f"Job {j.external_jobid} is still active.")
                     yield j
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
         # Cancel all active jobs.
-        # This method is called when Snakemake is interrupted.
-
         for j in active_jobs:
             self._kubernetes_retry(
                 lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
@@ -404,7 +505,6 @@ class Executor(RemoteExecutor):
             )
         )
 
-    # In rare cases, deleting a pod may raise 404 NotFound error.
     def safe_delete_pod(self, jobid, ignore_not_found=True):
         import kubernetes.client
 
@@ -413,8 +513,6 @@ class Executor(RemoteExecutor):
             self.kubeapi.delete_namespaced_pod(jobid, self.namespace, body=body)
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404 and ignore_not_found:
-                # Can't find the pod. Maybe it's already been
-                # destroyed. Proceed with a warning message.
                 self.logger.warning(
                     "[WARNING] 404 not found when trying to delete the pod: {jobid}\n"
                     "[WARNING] Ignore this error\n".format(jobid=jobid)
@@ -422,14 +520,6 @@ class Executor(RemoteExecutor):
             else:
                 raise e
 
-    # Sometimes, certain k8s requests throw kubernetes.client.rest.ApiException
-    # Solving this issue requires reauthentication, as _kubernetes_retry shows
-    # However, reauthentication itself, under rare conditions, may also throw
-    # errors such as:
-    #   kubernetes.client.exceptions.ApiException: (409), Reason: Conflict
-    #
-    # This error doesn't mean anything wrong with the k8s cluster, and users can safely
-    # ignore it.
     def _reauthenticate_and_retry(self, func=None):
         import kubernetes
 
@@ -490,7 +580,7 @@ class Executor(RemoteExecutor):
                     raise WorkflowError(
                         e,
                         "Error 111 connection timeout, please check"
-                        " that the k8 cluster master is reachable!",
+                        " that the k8s cluster master is reachable!",
                     )
 
 
