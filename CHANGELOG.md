@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.3.0...v0.3.1) (2025-03-05)
+
+
+### Bug Fixes
+
+* fix name of gpu_manufacturer resource ([#35](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/35)) ([3d6ed3a](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/3d6ed3a887035d4d49053bc7d9ffeea7315d7f94))
+
 ## [0.3.0](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.2.2...v0.3.0) (2025-02-08)
 
 
