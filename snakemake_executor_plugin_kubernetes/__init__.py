@@ -329,7 +329,7 @@ class Executor(RemoteExecutor):
             # But let's keep nvidia.com/gpu
             # for both if the cluster doesn't differentiate.
             # If your AMD plugin uses a different name, update accordingly:
-            manufacturer = resources_dict.get("manufacturer", "").lower()
+            manufacturer = resources_dict.get("gpu_manufacturer", "").lower()
             if manufacturer == "nvidia":
                 container.resources.requests["nvidia.com/gpu"] = gpu_count
                 self.logger.debug(f"Requested NVIDIA GPU resources: {gpu_count}")
