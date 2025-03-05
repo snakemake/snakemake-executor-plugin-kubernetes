@@ -304,8 +304,8 @@ class Executor(RemoteExecutor):
 
         # Request resources
         self.logger.debug(f"Job resources: {resources_dict}")
-        container.resources = kubernetes.client.V1ResourceRequirements()
-        container.resources.requests = {}
+        # Request resources
+        self.logger.debug(f"Job resources: {resources_dict}")
 
         # NEW SCALE LOGIC: Default is True - do not set any resource limits
         scale_value = resources_dict.get("scale", 1)
