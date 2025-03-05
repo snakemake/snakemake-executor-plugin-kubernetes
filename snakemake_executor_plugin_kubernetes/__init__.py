@@ -95,8 +95,6 @@ class ExecutorSettings(ExecutorSettingsBase):
             "nargs": "+",
         },
     )
-
-
 # Required:
 # Specify common settings shared by various executors.
 common_settings = CommonSettings(
@@ -116,7 +114,6 @@ common_settings = CommonSettings(
     pass_envvar_declarations_to_cmd=False,
     auto_deploy_default_storage_provider=True,
 )
-
 
 # Required:
 # Implementation of your executor
@@ -190,14 +187,15 @@ class Executor(RemoteExecutor):
         # Node selector
         node_selector = {}
         if "machine_type" in resources_dict.keys():
-            node_selector["node.kubernetes.io/instance-type"] = resources_dict[
-                "machine_type"
-            ]
+            node_selector["node.kubernetes.io/instance-type"] = resources_dict["machine_type"]
             self.logger.debug(f"Set node selector for machine type: {node_selector}")
+
 
         # Initialize PodSpec
         body.spec = kubernetes.client.V1PodSpec(
-            containers=[container], node_selector=node_selector, restart_policy="Never"
+            containers=[container],
+            node_selector=node_selector,
+            restart_policy="Never"
         )
 
         # Add toleration for GPU nodes if GPU is requested
@@ -207,7 +205,7 @@ class Executor(RemoteExecutor):
             if not manufacturer:
                 raise WorkflowError(
                     "GPU requested but no manufacturer set. "
-                    "Use gpu_manufacturer='nvidia' or 'amd'."
+                    "Use manufacturer='nvidia' or 'amd'."
                 )
             manufacturer_lc = manufacturer.lower()
             if manufacturer_lc == "nvidia":
@@ -219,12 +217,10 @@ class Executor(RemoteExecutor):
                         key="nvidia.com/gpu",
                         operator="Equal",
                         value="present",
-                        effect="NoSchedule",
+                        effect="NoSchedule"
                     )
                 )
-                self.logger.debug(
-                    f"Added toleration for NVIDIA GPU: {body.spec.tolerations}"
-                )
+                self.logger.debug(f"Added toleration for NVIDIA GPU: {body.spec.tolerations}")
 
             elif manufacturer_lc == "amd":
                 # Toleration for amd.com/gpu
@@ -235,12 +231,10 @@ class Executor(RemoteExecutor):
                         key="amd.com/gpu",
                         operator="Equal",
                         value="present",
-                        effect="NoSchedule",
+                        effect="NoSchedule"
                     )
                 )
-                self.logger.debug(
-                    f"Added toleration for AMD GPU: {body.spec.tolerations}"
-                )
+                self.logger.debug(f"Added toleration for AMD GPU: {body.spec.tolerations}")
 
             else:
                 raise WorkflowError(
@@ -274,9 +268,7 @@ class Executor(RemoteExecutor):
         # Add service account name if provided
         if self.k8s_service_account_name:
             body.spec.service_account_name = self.k8s_service_account_name
-            self.logger.debug(
-                f"Set service account name: {self.k8s_service_account_name}"
-            )
+            self.logger.debug(f"Set service account name: {self.k8s_service_account_name}")
 
         # Workdir volume
         workdir_volume = kubernetes.client.V1Volume(name="workdir")
@@ -304,43 +296,58 @@ class Executor(RemoteExecutor):
 
         # Request resources
         self.logger.debug(f"Job resources: {resources_dict}")
+
+        # NEW SCALE LOGIC: Default is True - do not set any resource limits 
+        scale_value = resources_dict.get("scale", 1)
         container.resources = kubernetes.client.V1ResourceRequirements()
         container.resources.requests = {}
+        # Only create container.resources.limits if scale is False
+        if not scale_value:
+            container.resources.limits = {}
 
         # CPU and memory requests
         cores = resources_dict.get("_cores", 1)
         container.resources.requests["cpu"] = "{}m".format(
             int(cores * self.k8s_cpu_scalar * 1000)
         )
+        if not scale_value:
+            container.resources.limits["cpu"] = "{}m".format(int(cores * 1000))
 
         if "mem_mb" in resources_dict:
             mem_mb = resources_dict["mem_mb"]
             container.resources.requests["memory"] = "{}M".format(mem_mb)
-
+            if not scale_value:
+                container.resources.limits["memory"] = "{}M".format(mem_mb) 
         # Disk
         if "disk_mb" in resources_dict:
             disk_mb = int(resources_dict.get("disk_mb", 1024))
             container.resources.requests["ephemeral-storage"] = f"{disk_mb}M"
+            if not scale_value:
+                 container.resources.limits["ephemeral-storage"] = f"{disk_mb}M"
 
         # Request GPU resources if specified
         if "gpu" in resources_dict:
             gpu_count = str(resources_dict["gpu"])
             # For nvidia, K8s expects nvidia.com/gpu; for amd, we use amd.com/gpu.
-            # But let's keep nvidia.com/gpu
-            # for both if the cluster doesn't differentiate.
+            # But let's keep nvidia.com/gpu for both if the cluster doesn't differentiate.
             # If your AMD plugin uses a different name, update accordingly:
             manufacturer = resources_dict.get("gpu_manufacturer", "").lower()
             if manufacturer == "nvidia":
                 container.resources.requests["nvidia.com/gpu"] = gpu_count
+                if not scale_value:
+                     container.resources.limits["nvidia.com/gpu"] = gpu_count
                 self.logger.debug(f"Requested NVIDIA GPU resources: {gpu_count}")
             elif manufacturer == "amd":
                 container.resources.requests["amd.com/gpu"] = gpu_count
+                if not scale_value:
+                     container.resources.limits["amd.com/gpu"] = gpu_count
                 self.logger.debug(f"Requested AMD GPU resources: {gpu_count}")
             else:
                 # fallback if we never see a recognized manufacturer
                 # (the code above raises an error first, so we might never get here)
                 container.resources.requests["nvidia.com/gpu"] = gpu_count
-
+                if not scale_value:
+                     container.resources.limits["nvidia.com/gpu"] = gpu_count
         # Privileged mode
         if self.privileged:
             container.security_context = kubernetes.client.V1SecurityContext(
@@ -355,7 +362,6 @@ class Executor(RemoteExecutor):
 
         # Serialize and log the pod specification
         import json
-
         self.logger.debug("Pod specification:")
         self.logger.debug(json.dumps(body.to_dict(), indent=2))
 
@@ -458,10 +464,11 @@ class Executor(RemoteExecutor):
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
         # Cancel all active jobs.
+        # This method is called when Snakemake is interrupted.
         for j in active_jobs:
-            self._kubernetes_retry(
-                lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
-            )
+                self._kubernetes_retry(
+                    lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
+                )
 
     def shutdown(self):
         self.unregister_secret()
@@ -522,7 +529,6 @@ class Executor(RemoteExecutor):
 
     def _reauthenticate_and_retry(self, func=None):
         import kubernetes
-
         # Unauthorized.
         # Reload config in order to ensure token is
         # refreshed. Then try again.
@@ -592,3 +598,4 @@ UUID_NAMESPACE = uuid.uuid5(
 
 def get_uuid(name):
     return uuid.uuid5(UUID_NAMESPACE, name)
+
