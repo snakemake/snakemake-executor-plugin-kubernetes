@@ -307,20 +307,31 @@ class Executor(RemoteExecutor):
         container.resources = kubernetes.client.V1ResourceRequirements()
         container.resources.requests = {}
 
+        scale_value = resources_dict.get("scale", 1)
+
+        # Only create container.resources.limits if scale is False
+        if not scale_value:
+            container.resources.limits = {}
         # CPU and memory requests
         cores = resources_dict.get("_cores", 1)
         container.resources.requests["cpu"] = "{}m".format(
             int(cores * self.k8s_cpu_scalar * 1000)
         )
 
+        if not scale_value:
+            container.resources.limits["cpu"] = "{}m".format(int(cores * 1000))
+
         if "mem_mb" in resources_dict:
             mem_mb = resources_dict["mem_mb"]
             container.resources.requests["memory"] = "{}M".format(mem_mb)
-
+            if not scale_value:
+                container.resources.limits["memory"] = "{}M".format(mem_mb)
         # Disk
         if "disk_mb" in resources_dict:
             disk_mb = int(resources_dict.get("disk_mb", 1024))
             container.resources.requests["ephemeral-storage"] = f"{disk_mb}M"
+            if not scale_value:
+                container.resources.limits["ephemeral-storage"] = f"{disk_mb}M"
 
         # Request GPU resources if specified
         if "gpu" in resources_dict:
@@ -332,15 +343,20 @@ class Executor(RemoteExecutor):
             manufacturer = resources_dict.get("gpu_manufacturer", "").lower()
             if manufacturer == "nvidia":
                 container.resources.requests["nvidia.com/gpu"] = gpu_count
+                if not scale_value:
+                    container.resources.limits["nvidia.com/gpu"] = gpu_count
                 self.logger.debug(f"Requested NVIDIA GPU resources: {gpu_count}")
             elif manufacturer == "amd":
                 container.resources.requests["amd.com/gpu"] = gpu_count
+                if not scale_value:
+                    container.resources.limits["amd.com/gpu"] = gpu_count
                 self.logger.debug(f"Requested AMD GPU resources: {gpu_count}")
             else:
                 # fallback if we never see a recognized manufacturer
                 # (the code above raises an error first, so we might never get here)
                 container.resources.requests["nvidia.com/gpu"] = gpu_count
-
+                if not scale_value:
+                    container.resources.limits["nvidia.com/gpu"] = gpu_count
         # Privileged mode
         if self.privileged:
             container.security_context = kubernetes.client.V1SecurityContext(
