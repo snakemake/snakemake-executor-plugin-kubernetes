@@ -304,24 +304,22 @@ class Executor(RemoteExecutor):
 
         # Request resources
         self.logger.debug(f"Job resources: {resources_dict}")
-        # Request resources
-        self.logger.debug(f"Job resources: {resources_dict}")
+        container.resources = kubernetes.client.V1ResourceRequirements()
+        container.resources.requests = {}
 
         # NEW SCALE LOGIC: Default is True - do not set any resource limits
         scale_value = resources_dict.get("scale", 1)
-        container.resources = kubernetes.client.V1ResourceRequirements()
-        container.resources.requests = {}
         # Only create container.resources.limits if scale is False
         if not scale_value:
             container.resources.limits = {}
-        
+
         # CPU and memory requests
         cores = resources_dict.get("_cores", 1)
         container.resources.requests["cpu"] = "{}m".format(
             int(cores * self.k8s_cpu_scalar * 1000)
         )
         if not scale_value:
-            container.resources.limits["cpu"] = "{}m".format(int(cores * self.k8s_cpu_scalar * 1000))
+            container.resources.limits["cpu"] = "{}m".format(int(self.k8s_cpu_scalar * 1000))
 
         if "mem_mb" in resources_dict:
             mem_mb = resources_dict["mem_mb"]
@@ -334,7 +332,7 @@ class Executor(RemoteExecutor):
             container.resources.requests["ephemeral-storage"] = f"{disk_mb}M"
             if not scale_value:
                 container.resources.limits["ephemeral-storage"] = f"{disk_mb}M"
-    
+
         # Request GPU resources if specified
         if "gpu" in resources_dict:
             gpu_count = str(resources_dict["gpu"])
