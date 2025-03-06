@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.3.1...v0.3.2) (2025-03-06)
+
+
+### Bug Fixes
+
+* Adding additional logic to handle resource limit requirements ([#38](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/38)) ([25819c5](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/25819c5ecd611960a60b3559b99aad4cb1fd3421))
+
 ## [0.3.1](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.3.0...v0.3.1) (2025-03-05)
 
 
