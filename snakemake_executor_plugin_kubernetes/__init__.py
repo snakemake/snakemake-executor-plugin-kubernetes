@@ -197,8 +197,7 @@ class Executor(RemoteExecutor):
 
         # Initialize PodSpec
         body.spec = kubernetes.client.V1PodSpec(
-            containers=[container], node_selector=node_selector, restart_policy="Never"
-        )
+            containers=[container], node_selector=node_selector)
 
         # Add toleration for GPU nodes if GPU is requested
         if "gpu" in resources_dict:
@@ -277,7 +276,9 @@ class Executor(RemoteExecutor):
             self.logger.debug(
                 f"Set service account name: {self.k8s_service_account_name}"
             )
-
+            
+        body.spec.restart_policy = "Never"
+        
         # Workdir volume
         workdir_volume = kubernetes.client.V1Volume(name="workdir")
         workdir_volume.empty_dir = kubernetes.client.V1EmptyDirVolumeSource()
@@ -366,13 +367,36 @@ class Executor(RemoteExecutor):
             self.logger.debug("Container set to run in privileged mode.")
 
         self.logger.debug(f"k8s pod resources: {container.resources}")
-
+        
+        # capabilities
+        if (
+            job.is_containerized
+            and DeploymentMethod.APPTAINER
+            in self.workflow.deployment_settings.deployment_method
+        ):
+            # TODO this should work, but it doesn't currently because of
+            # missing loop devices
+            # singularity inside docker requires SYS_ADMIN capabilities
+            # see
+            # https://groups.google.com/a/lbl.gov/forum/#!topic/singularity/e9mlDuzKowc
+            # container.capabilities = kubernetes.client.V1Capabilities()
+            # container.capabilities.add = ["SYS_ADMIN",
+            #                               "DAC_OVERRIDE",
+            #                               "SETUID",
+            #                               "SETGID",
+            #                               "SYS_CHROOT"]
         # Assign the modified container back to the spec
         body.spec.containers = [container]
-
+        # Running in priviledged mode always works
+        container.security_context = kubernetes.client.V1SecurityContext(
+             privileged=True
+            )
         # Serialize and log the pod specification
         import json
 
+        pod = self._kubernetes_retry(
+            lambda: self.kubeapi.create_namespaced_pod(self.namespace, body)
+        )
         self.logger.debug("Pod specification:")
         self.logger.debug(json.dumps(body.to_dict(), indent=2))
 
@@ -475,6 +499,7 @@ class Executor(RemoteExecutor):
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
         # Cancel all active jobs.
+        # This method is called when Snakemake is interrupted.
         for j in active_jobs:
             self._kubernetes_retry(
                 lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
@@ -521,7 +546,7 @@ class Executor(RemoteExecutor):
                 body=kubernetes.client.V1DeleteOptions(),
             )
         )
-
+    # In rare cases, deleting a pod may raise 404 NotFound error.
     def safe_delete_pod(self, jobid, ignore_not_found=True):
         import kubernetes.client
 
@@ -529,6 +554,8 @@ class Executor(RemoteExecutor):
         try:
             self.kubeapi.delete_namespaced_pod(jobid, self.namespace, body=body)
         except kubernetes.client.rest.ApiException as e:
+            # Can't find the pod. Maybe it's already been
+            # destroyed. Proceed with a warning message.
             if e.status == 404 and ignore_not_found:
                 self.logger.warning(
                     "[WARNING] 404 not found when trying to delete the pod: {jobid}\n"
@@ -536,7 +563,14 @@ class Executor(RemoteExecutor):
                 )
             else:
                 raise e
-
+# Sometimes, certain k8s requests throw kubernetes.client.rest.ApiException
+# Solving this issue requires reauthentication, as _kubernetes_retry shows
+# However, reauthentication itself, under rare conditions, may also throw
+# errors such as:
+#   kubernetes.client.exceptions.ApiException: (409), Reason: Conflict
+#
+# This error doesn't mean anything wrong with the k8s cluster, and users can safely
+# ignore it.
     def _reauthenticate_and_retry(self, func=None):
         import kubernetes
 
@@ -597,7 +631,7 @@ class Executor(RemoteExecutor):
                     raise WorkflowError(
                         e,
                         "Error 111 connection timeout, please check"
-                        " that the k8s cluster master is reachable!",
+                        " that the k8 cluster master is reachable!",
                     )
 
 
