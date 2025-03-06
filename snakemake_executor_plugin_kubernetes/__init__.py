@@ -319,7 +319,9 @@ class Executor(RemoteExecutor):
             int(cores * self.k8s_cpu_scalar * 1000)
         )
         if not scale_value:
-            container.resources.limits["cpu"] = "{}m".format(int(self.k8s_cpu_scalar * 1000))
+            container.resources.limits["cpu"] = "{}m".format(
+                int(self.k8s_cpu_scalar * 1000)
+            )
 
         if "mem_mb" in resources_dict:
             mem_mb = resources_dict["mem_mb"]
