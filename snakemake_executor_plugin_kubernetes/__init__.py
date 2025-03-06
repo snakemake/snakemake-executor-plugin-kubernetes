@@ -197,7 +197,8 @@ class Executor(RemoteExecutor):
 
         # Initialize PodSpec
         body.spec = kubernetes.client.V1PodSpec(
-            containers=[container], node_selector=node_selector)
+            containers=[container], node_selector=node_selector, restart_policy="Never"
+        )
 
         # Add toleration for GPU nodes if GPU is requested
         if "gpu" in resources_dict:
@@ -276,9 +277,7 @@ class Executor(RemoteExecutor):
             self.logger.debug(
                 f"Set service account name: {self.k8s_service_account_name}"
             )
-            
-        body.spec.restart_policy = "Never"
-        
+
         # Workdir volume
         workdir_volume = kubernetes.client.V1Volume(name="workdir")
         workdir_volume.empty_dir = kubernetes.client.V1EmptyDirVolumeSource()
@@ -308,22 +307,20 @@ class Executor(RemoteExecutor):
         container.resources = kubernetes.client.V1ResourceRequirements()
         container.resources.requests = {}
 
-        # NEW SCALE LOGIC: Default is True - do not set any resource limits
         scale_value = resources_dict.get("scale", 1)
+
         # Only create container.resources.limits if scale is False
         if not scale_value:
             container.resources.limits = {}
-
+            
         # CPU and memory requests
         cores = resources_dict.get("_cores", 1)
         container.resources.requests["cpu"] = "{}m".format(
             int(cores * self.k8s_cpu_scalar * 1000)
         )
         if not scale_value:
-            container.resources.limits["cpu"] = "{}m".format(
-                int(self.k8s_cpu_scalar * 1000)
-            )
-
+            container.resources.limits["cpu"] = "{}m".format(int(cores * 1000))
+        
         if "mem_mb" in resources_dict:
             mem_mb = resources_dict["mem_mb"]
             container.resources.requests["memory"] = "{}M".format(mem_mb)
@@ -334,31 +331,31 @@ class Executor(RemoteExecutor):
             disk_mb = int(resources_dict.get("disk_mb", 1024))
             container.resources.requests["ephemeral-storage"] = f"{disk_mb}M"
             if not scale_value:
-                container.resources.limits["ephemeral-storage"] = f"{disk_mb}M"
-
+                 container.resources.limits["ephemeral-storage"] = f"{disk_mb}M"
+                
         # Request GPU resources if specified
         if "gpu" in resources_dict:
             gpu_count = str(resources_dict["gpu"])
             # For nvidia, K8s expects nvidia.com/gpu; for amd, we use amd.com/gpu.
+            # But let's keep nvidia.com/gpu for both if the cluster doesn't differentiate.
             # If your AMD plugin uses a different name, update accordingly:
             manufacturer = resources_dict.get("gpu_manufacturer", "").lower()
             if manufacturer == "nvidia":
                 container.resources.requests["nvidia.com/gpu"] = gpu_count
                 if not scale_value:
-                    container.resources.limits["nvidia.com/gpu"] = gpu_count
+                     container.resources.limits["nvidia.com/gpu"] = gpu_count
                 self.logger.debug(f"Requested NVIDIA GPU resources: {gpu_count}")
             elif manufacturer == "amd":
                 container.resources.requests["amd.com/gpu"] = gpu_count
                 if not scale_value:
-                    container.resources.limits["amd.com/gpu"] = gpu_count
+                     container.resources.limits["amd.com/gpu"] = gpu_count
                 self.logger.debug(f"Requested AMD GPU resources: {gpu_count}")
             else:
                 # fallback if we never see a recognized manufacturer
                 # (the code above raises an error first, so we might never get here)
                 container.resources.requests["nvidia.com/gpu"] = gpu_count
                 if not scale_value:
-                    container.resources.limits["nvidia.com/gpu"] = gpu_count
-
+                     container.resources.limits["nvidia.com/gpu"] = gpu_count
         # Privileged mode
         if self.privileged:
             container.security_context = kubernetes.client.V1SecurityContext(
@@ -367,36 +364,13 @@ class Executor(RemoteExecutor):
             self.logger.debug("Container set to run in privileged mode.")
 
         self.logger.debug(f"k8s pod resources: {container.resources}")
-        
-        # capabilities
-        if (
-            job.is_containerized
-            and DeploymentMethod.APPTAINER
-            in self.workflow.deployment_settings.deployment_method
-        ):
-            # TODO this should work, but it doesn't currently because of
-            # missing loop devices
-            # singularity inside docker requires SYS_ADMIN capabilities
-            # see
-            # https://groups.google.com/a/lbl.gov/forum/#!topic/singularity/e9mlDuzKowc
-            # container.capabilities = kubernetes.client.V1Capabilities()
-            # container.capabilities.add = ["SYS_ADMIN",
-            #                               "DAC_OVERRIDE",
-            #                               "SETUID",
-            #                               "SETGID",
-            #                               "SYS_CHROOT"]
+
         # Assign the modified container back to the spec
         body.spec.containers = [container]
-        # Running in priviledged mode always works
-        container.security_context = kubernetes.client.V1SecurityContext(
-             privileged=True
-            )
+
         # Serialize and log the pod specification
         import json
 
-        pod = self._kubernetes_retry(
-            lambda: self.kubeapi.create_namespaced_pod(self.namespace, body)
-        )
         self.logger.debug("Pod specification:")
         self.logger.debug(json.dumps(body.to_dict(), indent=2))
 
@@ -499,7 +473,6 @@ class Executor(RemoteExecutor):
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
         # Cancel all active jobs.
-        # This method is called when Snakemake is interrupted.
         for j in active_jobs:
             self._kubernetes_retry(
                 lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
@@ -546,7 +519,7 @@ class Executor(RemoteExecutor):
                 body=kubernetes.client.V1DeleteOptions(),
             )
         )
-    # In rare cases, deleting a pod may raise 404 NotFound error.
+
     def safe_delete_pod(self, jobid, ignore_not_found=True):
         import kubernetes.client
 
@@ -554,8 +527,6 @@ class Executor(RemoteExecutor):
         try:
             self.kubeapi.delete_namespaced_pod(jobid, self.namespace, body=body)
         except kubernetes.client.rest.ApiException as e:
-            # Can't find the pod. Maybe it's already been
-            # destroyed. Proceed with a warning message.
             if e.status == 404 and ignore_not_found:
                 self.logger.warning(
                     "[WARNING] 404 not found when trying to delete the pod: {jobid}\n"
@@ -563,14 +534,7 @@ class Executor(RemoteExecutor):
                 )
             else:
                 raise e
-# Sometimes, certain k8s requests throw kubernetes.client.rest.ApiException
-# Solving this issue requires reauthentication, as _kubernetes_retry shows
-# However, reauthentication itself, under rare conditions, may also throw
-# errors such as:
-#   kubernetes.client.exceptions.ApiException: (409), Reason: Conflict
-#
-# This error doesn't mean anything wrong with the k8s cluster, and users can safely
-# ignore it.
+
     def _reauthenticate_and_retry(self, func=None):
         import kubernetes
 
@@ -631,7 +595,7 @@ class Executor(RemoteExecutor):
                     raise WorkflowError(
                         e,
                         "Error 111 connection timeout, please check"
-                        " that the k8 cluster master is reachable!",
+                        " that the k8s cluster master is reachable!",
                     )
 
 
