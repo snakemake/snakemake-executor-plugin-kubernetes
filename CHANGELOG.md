@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.3.2...v0.3.3) (2025-03-14)
+
+
+### Bug Fixes
+
+* Added documentation for scale variable ([#40](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/40)) ([1b668c1](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/1b668c180f3b13c4d9bd7b8121834df8fd778cee))
+
 ## [0.3.2](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.3.1...v0.3.2) (2025-03-06)
 
 
