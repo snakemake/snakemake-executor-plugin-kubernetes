@@ -93,14 +93,14 @@ jobs:
         run: |
           kubectl create -f .github/workflows/assets/minio.yaml
           kubectl expose deployment/my-minio-fs --type="NodePort" --port 9000
+          kubectl port-forward svc/minio-service 9000:9000
 
       - name: Test minio
         run: |
           export AWS_ACCESS_KEY_ID=minio
           export AWS_SECRET_ACCESS_KEY=minio123
           export AWS_EC2_METADATA_DISABLED=true
-          export MINIO_PORT=$(kubectl get services/my-minio-fs -o go-template='{{(index .spec.ports 0).nodePort}}')
-          aws --endpoint-url http://minikube:$MINIO_PORT/ s3 mb s3://test
+          aws --endpoint-url http://127.0.0.1:9000/ s3 mb s3://test
 
       - name: Run pytest
         run: poetry run coverage run -m pytest tests/tests.py -sv
