@@ -93,7 +93,7 @@ jobs:
         run: |
           kubectl create -f .github/workflows/assets/minio.yaml
           sleep 10
-    
+
       - uses: JarvusInnovations/background-action@v1
         with:
           run: |
