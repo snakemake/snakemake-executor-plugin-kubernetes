@@ -93,7 +93,13 @@ jobs:
         run: |
           kubectl create -f .github/workflows/assets/minio.yaml
           sleep 10
-          kubectl port-forward svc/minio-service 9000:9000
+    
+      - uses: JarvusInnovations/background-action@v1
+        with:
+          run: |
+            kubectl port-forward svc/minio-service 9000:9000
+          wait-on: |
+            http://localhost:9000
 
       - name: Test minio
         run: |
