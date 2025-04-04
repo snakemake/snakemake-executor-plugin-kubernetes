@@ -34,4 +34,4 @@ class TestWorkflows(snakemake.common.tests.TestWorkflowsMinioPlayStorageBase):
 
     @property
     def endpoint_url(self):
-        return "http://host.docker.internal:9000"
+        return "http://host.minikube.internal:9000"

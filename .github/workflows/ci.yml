@@ -110,14 +110,14 @@ jobs:
           port: 9000
 
       - run: |
-          sudo sh -c 'echo "127.0.0.1    host.docker.internal" >> /etc/hosts'
+          sudo sh -c 'echo "127.0.0.1    host.minikube.internal" >> /etc/hosts'
 
       - name: Test minio
         run: |
           export AWS_ACCESS_KEY_ID=minio
           export AWS_SECRET_ACCESS_KEY=minio123
           export AWS_EC2_METADATA_DISABLED=true
-          aws --endpoint-url http://host.docker.internal:9000/ s3 mb s3://test
+          aws --endpoint-url http://host.minikube.internal:9000/ s3 mb s3://test
           aws --endpoint-url http://localhost:9000/ s3 mb s3://test2
 
       - name: Run pytest
