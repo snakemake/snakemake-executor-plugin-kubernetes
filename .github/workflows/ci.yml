@@ -89,6 +89,37 @@ jobs:
         id: minikube
         uses: medyagh/setup-minikube@v0.0.14
 
+      # - name: Setup minio
+      #   run: |
+      #     kubectl create -f .github/workflows/assets/minio.yaml
+      #     sleep 10
+      #     kubectl port-forward svc/minio-service 9000:9000 &
+
+      # - name: Test minio
+      #   run: |
+      #     export AWS_ACCESS_KEY_ID=minio
+      #     export AWS_SECRET_ACCESS_KEY=minio123
+      #     export AWS_EC2_METADATA_DISABLED=true
+      #     aws --endpoint-url http://127.0.0.1:9000/ s3 mb s3://test
+
+      - name: Setup minio
+        uses: comfuture/minio-action@v1
+        with:
+          access_key: minio
+          secret_key: minio123
+          port: 9000
+
+      - run: |
+          sudo sh -c 'echo "127.0.0.1    host.minikube.internal" >> /etc/hosts'
+
+      - name: Test minio
+        run: |
+          export AWS_ACCESS_KEY_ID=minio
+          export AWS_SECRET_ACCESS_KEY=minio123
+          export AWS_EC2_METADATA_DISABLED=true
+          aws --endpoint-url http://host.minikube.internal:9000/ s3 mb s3://test
+          aws --endpoint-url http://localhost:9000/ s3 mb s3://test2
+
       - name: Run pytest
         run: poetry run coverage run -m pytest tests/tests.py -sv
 

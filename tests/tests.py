@@ -31,3 +31,7 @@ class TestWorkflows(snakemake.common.tests.TestWorkflowsMinioPlayStorageBase):
             seconds_between_status_checks=10,
             envvars=self.get_envvars(),
         )
+
+    @property
+    def endpoint_url(self):
+        return "http://host.minikube.internal:9000"

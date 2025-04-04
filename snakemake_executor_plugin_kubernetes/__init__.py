@@ -580,6 +580,7 @@ class Executor(RemoteExecutor):
                     # Reload config in order to ensure token is
                     # refreshed. Then try again.
                     return self._reauthenticate_and_retry(func)
+                raise WorkflowError("Kubernetes request failed.", e)
             # Handling timeout that may occur in case of GKE master upgrade
             except urllib3.exceptions.MaxRetryError:
                 self.logger.warning(
