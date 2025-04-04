@@ -40,6 +40,7 @@ class V1FixedPodFailurePolicyRule(kubernetes.client.V1PodFailurePolicyRule):
         """
         self._on_pod_conditions = on_pod_conditions
 
+
 kubernetes.client.V1PodFailurePolicyRule = V1FixedPodFailurePolicyRule
 kubernetes.client.models.V1PodFailurePolicyRule = V1FixedPodFailurePolicyRule
 
@@ -223,17 +224,17 @@ class Executor(RemoteExecutor):
             backoff_limit=0,
             completions=1,
             pod_failure_policy=kubernetes.client.V1PodFailurePolicy(
-                rules=[kubernetes.client.V1PodFailurePolicyRule(
-                    action="FailJob",
-                    on_exit_codes=kubernetes.client.V1PodFailurePolicyOnExitCodesRequirement(
-                        operator="NotIn",
-                        values=[0],
-                    ),
-                )]
+                rules=[
+                    kubernetes.client.V1PodFailurePolicyRule(
+                        action="FailJob",
+                        on_exit_codes=kubernetes.client.V1PodFailurePolicyOnExitCodesRequirement(
+                            operator="NotIn",
+                            values=[0],
+                        ),
+                    )
+                ]
             ),
-            template=kubernetes.client.V1PodTemplateSpec(
-                spec=pod_spec
-            )
+            template=kubernetes.client.V1PodTemplateSpec(spec=pod_spec),
         )
 
         # Add toleration for GPU nodes if GPU is requested
@@ -471,13 +472,30 @@ class Executor(RemoteExecutor):
                     self.logger.error(f"WorkflowError when checking pod status: {e}")
                     self.report_job_error(j, msg=str(e))
                     continue
-                
-                pods = self.kubeapi.list_namespaced_pod(namespace=self.namespace, label_selector=f"job-name={j.external_jobid}")
+
+                # Sometimes, just checking the status of a job is not enough, because
+                # apparently, depending on the cluster setup, there can be additional
+                # containers injected into pods that will prevent the job to detect
+                # that a pod is already terminated.
+                # We therefore check the status of the snakemake container in addition
+                # to the job status.
+                pods = self.kubeapi.list_namespaced_pod(
+                    namespace=self.namespace,
+                    label_selector=f"job-name={j.external_jobid}",
+                )
                 assert len(pods.items) <= 1
                 if pods.items:
                     pod = pods.items[0]
-                    snakemake_container = [container for container in pod.status.container_statuses if container.name == "snakemake"][0]
-                    snakemake_container_exit_code = snakemake_container.state.terminated.exit_code if snakemake_container.state.terminated is not None else None
+                    snakemake_container = [
+                        container
+                        for container in pod.status.container_statuses
+                        if container.name == "snakemake"
+                    ][0]
+                    snakemake_container_exit_code = (
+                        snakemake_container.state.terminated.exit_code
+                        if snakemake_container.state.terminated is not None
+                        else None
+                    )
                 else:
                     snakemake_container = None
                     snakemake_container_exit_code = None
@@ -488,7 +506,10 @@ class Executor(RemoteExecutor):
                     ).format(jobid=j.external_jobid)
                     self.logger.error(msg)
                     self.report_job_error(j, msg=msg)
-                elif res.status.failed == 1 or (snakemake_container_exit_code is not None and snakemake_container_exit_code != 0):
+                elif res.status.failed == 1 or (
+                    snakemake_container_exit_code is not None
+                    and snakemake_container_exit_code != 0
+                ):
                     msg = (
                         "For details, please issue:\n"
                         f"kubectl describe job {j.external_jobid}\n"
@@ -498,7 +519,9 @@ class Executor(RemoteExecutor):
                     kube_log = self.log_path / f"{j.external_jobid}.log"
                     with open(kube_log, "w") as f:
                         kube_log_content = self.kubeapi.read_namespaced_pod_log(
-                            name=pod.metadata.name, namespace=self.namespace, container=snakemake_container.name
+                            name=pod.metadata.name,
+                            namespace=self.namespace,
+                            container=snakemake_container.name,
                         )
                         print(kube_log_content, file=f)
                     self.logger.error(f"Job {j.external_jobid} failed. {msg}")
@@ -572,7 +595,9 @@ class Executor(RemoteExecutor):
 
         body = kubernetes.client.V1DeleteOptions()
         try:
-            self.batchapi.delete_namespaced_job(jobid, self.namespace, propagation_policy="Foreground", body=body)
+            self.batchapi.delete_namespaced_job(
+                jobid, self.namespace, propagation_policy="Foreground", body=body
+            )
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404 and ignore_not_found:
                 self.logger.warning(
