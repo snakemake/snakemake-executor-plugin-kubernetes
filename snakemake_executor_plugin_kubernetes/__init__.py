@@ -512,7 +512,9 @@ class Executor(RemoteExecutor):
         # Cancel all active jobs.
         for j in active_jobs:
             self._kubernetes_retry(
-                lambda: self.safe_delete_job(j.external_jobid, ignore_not_found=True)
+                lambda jobid=j.external_jobid: self.safe_delete_job(
+                    jobid, ignore_not_found=True
+                )
             )
 
     def shutdown(self):
