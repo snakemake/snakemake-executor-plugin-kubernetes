@@ -24,27 +24,6 @@ from snakemake_interface_common.exceptions import WorkflowError
 from snakemake_interface_executor_plugins.settings import DeploymentMethod
 
 
-class V1FixedPodFailurePolicyRule(kubernetes.client.V1PodFailurePolicyRule):
-    @property
-    def on_pod_conditions(self):
-        return self._on_pod_conditions
-
-    @on_pod_conditions.setter
-    def on_pod_conditions(self, on_pod_conditions):
-        """Sets the on_pod_conditions of this V1PodFailurePolicyRule.
-
-        Represents the requirement on the pod conditions. The requirement is represented as a list of pod condition patterns. The requirement is satisfied if at least one pattern matches an actual pod condition. At most 20 elements are allowed.  # noqa: E501
-
-        :param on_pod_conditions: The on_pod_conditions of this V1PodFailurePolicyRule.  # noqa: E501
-        :type: list[V1PodFailurePolicyOnPodConditionsPattern]
-        """
-        self._on_pod_conditions = on_pod_conditions
-
-
-kubernetes.client.V1PodFailurePolicyRule = V1FixedPodFailurePolicyRule
-kubernetes.client.models.V1PodFailurePolicyRule = V1FixedPodFailurePolicyRule
-
-
 @dataclass
 class PersistentVolume:
     name: str
@@ -222,18 +201,6 @@ class Executor(RemoteExecutor):
         )
         body.spec = kubernetes.client.V1JobSpec(
             backoff_limit=0,
-            completions=1,
-            pod_failure_policy=kubernetes.client.V1PodFailurePolicy(
-                rules=[
-                    kubernetes.client.V1PodFailurePolicyRule(
-                        action="FailJob",
-                        on_exit_codes=kubernetes.client.V1PodFailurePolicyOnExitCodesRequirement(
-                            operator="NotIn",
-                            values=[0],
-                        ),
-                    )
-                ]
-            ),
             template=kubernetes.client.V1PodTemplateSpec(spec=pod_spec),
         )
 
