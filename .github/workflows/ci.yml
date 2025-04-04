@@ -92,7 +92,6 @@ jobs:
       - name: Setup minio
         run: |
           kubectl create -f .github/workflows/assets/minio.yaml
-          kubectl expose deployment/my-minio-fs --type="NodePort" --port 9000
           kubectl port-forward svc/minio-service 9000:9000
 
       - name: Test minio
