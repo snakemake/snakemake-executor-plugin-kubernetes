@@ -167,12 +167,12 @@ class Executor(RemoteExecutor):
             get_uuid(f"{self.run_namespace}-{job.jobid}-{job.attempt}")
         )
 
-        body = kubernetes.client.V1Pod()
+        body = kubernetes.client.V1Job()
         body.metadata = kubernetes.client.V1ObjectMeta(labels={"app": "snakemake"})
         body.metadata.name = jobid
 
         # Container setup
-        container = kubernetes.client.V1Container(name=jobid)
+        container = kubernetes.client.V1Container(name="snakemake")
         container.image = self.container_image
         container.command = shlex.split("/bin/sh")
         container.args = ["-c", exec_job]
@@ -196,8 +196,12 @@ class Executor(RemoteExecutor):
             self.logger.debug(f"Set node selector for machine type: {node_selector}")
 
         # Initialize PodSpec
-        body.spec = kubernetes.client.V1PodSpec(
+        pod_spec = kubernetes.client.V1PodSpec(
             containers=[container], node_selector=node_selector, restart_policy="Never"
+        )
+        body.spec = kubernetes.client.V1JobSpec(
+            backoff_limit=0,
+            template=kubernetes.client.V1PodTemplateSpec(spec=pod_spec),
         )
 
         # Add toleration for GPU nodes if GPU is requested
@@ -212,9 +216,9 @@ class Executor(RemoteExecutor):
             manufacturer_lc = manufacturer.lower()
             if manufacturer_lc == "nvidia":
                 # Toleration for nvidia.com/gpu
-                if body.spec.tolerations is None:
-                    body.spec.tolerations = []
-                body.spec.tolerations.append(
+                if pod_spec.tolerations is None:
+                    pod_spec.tolerations = []
+                pod_spec.tolerations.append(
                     kubernetes.client.V1Toleration(
                         key="nvidia.com/gpu",
                         operator="Equal",
@@ -223,14 +227,14 @@ class Executor(RemoteExecutor):
                     )
                 )
                 self.logger.debug(
-                    f"Added toleration for NVIDIA GPU: {body.spec.tolerations}"
+                    f"Added toleration for NVIDIA GPU: {pod_spec.tolerations}"
                 )
 
             elif manufacturer_lc == "amd":
                 # Toleration for amd.com/gpu
-                if body.spec.tolerations is None:
-                    body.spec.tolerations = []
-                body.spec.tolerations.append(
+                if pod_spec.tolerations is None:
+                    pod_spec.tolerations = []
+                pod_spec.tolerations.append(
                     kubernetes.client.V1Toleration(
                         key="amd.com/gpu",
                         operator="Equal",
@@ -239,7 +243,7 @@ class Executor(RemoteExecutor):
                     )
                 )
                 self.logger.debug(
-                    f"Added toleration for AMD GPU: {body.spec.tolerations}"
+                    f"Added toleration for AMD GPU: {pod_spec.tolerations}"
                 )
 
             else:
@@ -273,7 +277,7 @@ class Executor(RemoteExecutor):
 
         # Add service account name if provided
         if self.k8s_service_account_name:
-            body.spec.service_account_name = self.k8s_service_account_name
+            pod_spec.service_account_name = self.k8s_service_account_name
             self.logger.debug(
                 f"Set service account name: {self.k8s_service_account_name}"
             )
@@ -281,7 +285,7 @@ class Executor(RemoteExecutor):
         # Workdir volume
         workdir_volume = kubernetes.client.V1Volume(name="workdir")
         workdir_volume.empty_dir = kubernetes.client.V1EmptyDirVolumeSource()
-        body.spec.volumes = [workdir_volume]
+        pod_spec.volumes = [workdir_volume]
 
         for pvc in self.persistent_volumes:
             volume = kubernetes.client.V1Volume(name=pvc.name)
@@ -290,7 +294,7 @@ class Executor(RemoteExecutor):
                     claim_name=pvc.name
                 )
             )
-            body.spec.volumes.append(volume)
+            pod_spec.volumes.append(volume)
 
         # Env vars
         container.env = []
@@ -378,7 +382,7 @@ class Executor(RemoteExecutor):
         # Try creating the pod with exception handling
         try:
             pod = self._kubernetes_retry(
-                lambda: self.kubeapi.create_namespaced_pod(self.namespace, body)
+                lambda: self.batchapi.create_namespaced_job(self.namespace, body)
             )
         except kubernetes.client.rest.ApiException as e:
             self.logger.error(f"Failed to create pod: {e}")
@@ -416,7 +420,7 @@ class Executor(RemoteExecutor):
             async with self.status_rate_limiter:
                 try:
                     res = self._kubernetes_retry(
-                        lambda: self.kubeapi.read_namespaced_pod_status(
+                        lambda: self.batchapi.read_namespaced_job_status(
                             j.external_jobid, self.namespace
                         )
                     )
@@ -436,34 +440,66 @@ class Executor(RemoteExecutor):
                     self.report_job_error(j, msg=str(e))
                     continue
 
+                # Sometimes, just checking the status of a job is not enough, because
+                # apparently, depending on the cluster setup, there can be additional
+                # containers injected into pods that will prevent the job to detect
+                # that a pod is already terminated.
+                # We therefore check the status of the snakemake container in addition
+                # to the job status.
+                pods = self.kubeapi.list_namespaced_pod(
+                    namespace=self.namespace,
+                    label_selector=f"job-name={j.external_jobid}",
+                )
+                assert len(pods.items) <= 1
+                if pods.items:
+                    pod = pods.items[0]
+                    snakemake_container = [
+                        container
+                        for container in pod.status.container_statuses
+                        if container.name == "snakemake"
+                    ][0]
+                    snakemake_container_exit_code = (
+                        snakemake_container.state.terminated.exit_code
+                        if snakemake_container.state.terminated is not None
+                        else None
+                    )
+                else:
+                    snakemake_container = None
+                    snakemake_container_exit_code = None
+
                 if res is None:
                     msg = (
-                        "Unknown pod {jobid}. Has the pod been deleted manually?"
+                        "Unknown job {jobid}. Has the job been deleted manually?"
                     ).format(jobid=j.external_jobid)
                     self.logger.error(msg)
                     self.report_job_error(j, msg=msg)
-                elif res.status.phase == "Failed":
+                elif res.status.failed == 1 or (
+                    snakemake_container_exit_code is not None
+                    and snakemake_container_exit_code != 0
+                ):
                     msg = (
                         "For details, please issue:\n"
-                        "kubectl describe pod {jobid}\n"
-                        "kubectl logs {jobid}"
-                    ).format(jobid=j.external_jobid)
-                    # failed
-                    kube_log_content = self.kubeapi.read_namespaced_pod_log(
-                        name=j.external_jobid, namespace=self.namespace
+                        f"kubectl describe job {j.external_jobid}\n"
+                        f"kubectl logs {j.external_jobid}"
                     )
+                    # failed
                     kube_log = self.log_path / f"{j.external_jobid}.log"
                     with open(kube_log, "w") as f:
-                        f.write(kube_log_content)
+                        kube_log_content = self.kubeapi.read_namespaced_pod_log(
+                            name=pod.metadata.name,
+                            namespace=self.namespace,
+                            container=snakemake_container.name,
+                        )
+                        print(kube_log_content, file=f)
                     self.logger.error(f"Job {j.external_jobid} failed. {msg}")
                     self.report_job_error(j, msg=msg, aux_logs=[str(kube_log)])
-                elif res.status.phase == "Succeeded":
+                elif res.status.succeeded == 1 or (snakemake_container_exit_code == 0):
                     # finished
                     self.logger.info(f"Job {j.external_jobid} succeeded.")
                     self.report_job_success(j)
 
                     self._kubernetes_retry(
-                        lambda: self.safe_delete_pod(
+                        lambda: self.safe_delete_job(
                             j.external_jobid, ignore_not_found=True
                         )
                     )
@@ -476,7 +512,9 @@ class Executor(RemoteExecutor):
         # Cancel all active jobs.
         for j in active_jobs:
             self._kubernetes_retry(
-                lambda: self.safe_delete_pod(j.external_jobid, ignore_not_found=True)
+                lambda jobid=j.external_jobid: self.safe_delete_job(
+                    jobid, ignore_not_found=True
+                )
             )
 
     def shutdown(self):
@@ -521,16 +559,18 @@ class Executor(RemoteExecutor):
             )
         )
 
-    def safe_delete_pod(self, jobid, ignore_not_found=True):
+    def safe_delete_job(self, jobid, ignore_not_found=True):
         import kubernetes.client
 
         body = kubernetes.client.V1DeleteOptions()
         try:
-            self.kubeapi.delete_namespaced_pod(jobid, self.namespace, body=body)
+            self.batchapi.delete_namespaced_job(
+                jobid, self.namespace, propagation_policy="Foreground", body=body
+            )
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404 and ignore_not_found:
                 self.logger.warning(
-                    "[WARNING] 404 not found when trying to delete the pod: {jobid}\n"
+                    "[WARNING] 404 not found when trying to delete the job: {jobid}\n"
                     "[WARNING] Ignore this error\n".format(jobid=jobid)
                 )
             else:
