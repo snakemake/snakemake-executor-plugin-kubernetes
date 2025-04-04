@@ -100,6 +100,7 @@ jobs:
             kubectl port-forward svc/minio-service 9000:9000
           wait-on: |
             http://localhost:9000
+          tail: true
 
       - name: Test minio
         run: |
