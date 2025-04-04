@@ -110,7 +110,7 @@ jobs:
           port: 9000
 
       - run: |
-          sudo echo "127.0.0.1    host.docker.internal" >> /etc/hosts
+          sudo sh -c 'echo "127.0.0.1    host.docker.internal" >> /etc/hosts'
 
       - name: Test minio
         run: |
