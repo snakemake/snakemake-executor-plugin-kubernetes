@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.3.2...v0.4.0) (2025-04-04)
+
+
+### Features
+
+* use k8s job API and improve status check robustness in case of injected containers ([#43](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/43)) ([1ff6927](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/1ff6927d40794926e9a86b88ea41341f82079c95))
+
+
+### Bug Fixes
+
+* Added documentation for scale variable ([#40](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/40)) ([1b668c1](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/1b668c180f3b13c4d9bd7b8121834df8fd778cee))
+* properly catch and report ApiExceptions ([#42](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/42)) ([92375e6](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/92375e64470887ace6fadccdcd4befba9deadf01))
+
 ## [0.3.2](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.3.1...v0.3.2) (2025-03-06)
 
 
