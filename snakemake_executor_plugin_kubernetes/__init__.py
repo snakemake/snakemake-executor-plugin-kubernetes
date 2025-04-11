@@ -390,8 +390,7 @@ class Executor(RemoteExecutor):
 
         self.logger.info(
             "Get status with:\n"
-            "kubectl describe pod {jobid}\n"
-            "kubectl logs {jobid}".format(jobid=jobid)
+            "kubectl describe job {jobid}\n"
         )
 
         self.report_job_submission(
@@ -479,8 +478,7 @@ class Executor(RemoteExecutor):
                 ):
                     msg = (
                         "For details, please issue:\n"
-                        f"kubectl describe job {j.external_jobid}\n"
-                        f"kubectl logs {j.external_jobid}"
+                        f"kubectl describe job {j.external_jobid}"
                     )
                     # failed
                     kube_log = self.log_path / f"{j.external_jobid}.log"
