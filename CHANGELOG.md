@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.4.0...v0.4.1) (2025-05-15)
+
+
+### Bug Fixes
+
+* output correct kubectl commands for changed submission approach (jobs instead of pods) ([#47](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/47)) ([0337d1c](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/0337d1c55ab2566ccd7cb35672c16ecce3e90483))
+
 ## [0.4.0](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.3.2...v0.4.0) (2025-04-04)
 
 
