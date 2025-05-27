@@ -4,7 +4,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import time
-from typing import AsyncGenerator, List, Generator, Optional, Self
+from typing import AsyncGenerator, List, Optional, Self
 import uuid
 
 import kubernetes
