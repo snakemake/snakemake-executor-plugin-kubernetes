@@ -466,7 +466,6 @@ class Executor(RemoteExecutor):
                     snakemake_container_exit_code = None
                     pod_name = None
 
-
                 if res.status.failed == 1 or (
                     snakemake_container_exit_code is not None
                     and snakemake_container_exit_code != 0
