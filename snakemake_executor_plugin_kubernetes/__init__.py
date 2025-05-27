@@ -4,7 +4,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import time
-from typing import List, Generator, Optional, Self
+from typing import AsyncGenerator, List, Generator, Optional, Self
 import uuid
 
 import kubernetes
@@ -396,7 +396,7 @@ class Executor(RemoteExecutor):
 
     async def check_active_jobs(
         self, active_jobs: List[SubmittedJobInfo]
-    ) -> Generator[SubmittedJobInfo, None, None]:
+    ) -> AsyncGenerator[SubmittedJobInfo, None]:
         # Check the status of active jobs.
 
         # You have to iterate over the given list active_jobs.
@@ -416,24 +416,25 @@ class Executor(RemoteExecutor):
             async with self.status_rate_limiter:
                 try:
                     res = self._kubernetes_retry(
-                        lambda: self.batchapi.read_namespaced_job_status(
+                        lambda j=j: self.batchapi.read_namespaced_job_status(
                             j.external_jobid, self.namespace
                         )
                     )
                 except kubernetes.client.rest.ApiException as e:
-                    if e.status == 404:
-                        # Jobid not found
-                        # The job is likely already done and was deleted on
-                        # the server.
-                        j.callback(j.job)
-                        continue
-                    else:
-                        self.logger.error(f"ApiException when checking pod status: {e}")
-                        self.report_job_error(j, msg=str(e))
-                        continue
+                    self.logger.error(f"ApiException when checking pod status: {e}")
+                    self.report_job_error(j, msg=str(e))
+                    continue
                 except WorkflowError as e:
                     self.logger.error(f"WorkflowError when checking pod status: {e}")
                     self.report_job_error(j, msg=str(e))
+                    continue
+
+                if res is None:
+                    msg = (
+                        "Unknown job {jobid}. Has the job been deleted manually?"
+                    ).format(jobid=j.external_jobid)
+                    self.logger.error(msg)
+                    self.report_job_error(j, msg=msg)
                     continue
 
                 # Sometimes, just checking the status of a job is not enough, because
@@ -459,17 +460,14 @@ class Executor(RemoteExecutor):
                         if snakemake_container.state.terminated is not None
                         else None
                     )
+                    pod_name = pod.metadata.name
                 else:
                     snakemake_container = None
                     snakemake_container_exit_code = None
+                    pod_name = None
 
-                if res is None:
-                    msg = (
-                        "Unknown job {jobid}. Has the job been deleted manually?"
-                    ).format(jobid=j.external_jobid)
-                    self.logger.error(msg)
-                    self.report_job_error(j, msg=msg)
-                elif res.status.failed == 1 or (
+
+                if res.status.failed == 1 or (
                     snakemake_container_exit_code is not None
                     and snakemake_container_exit_code != 0
                 ):
@@ -477,24 +475,36 @@ class Executor(RemoteExecutor):
                         "For details, please issue:\n"
                         f"kubectl describe job {j.external_jobid}"
                     )
-                    # failed
-                    kube_log = self.log_path / f"{j.external_jobid}.log"
-                    with open(kube_log, "w") as f:
-                        kube_log_content = self.kubeapi.read_namespaced_pod_log(
-                            name=pod.metadata.name,
-                            namespace=self.namespace,
-                            container=snakemake_container.name,
-                        )
-                        print(kube_log_content, file=f)
+
+                    if pod_name is not None:
+                        assert snakemake_container is not None
+                        kube_log = self.log_path / f"{j.external_jobid}.log"
+                        with open(kube_log, "w") as f:
+                            kube_log_content = self.kubeapi.read_namespaced_pod_log(
+                                name=pod_name,
+                                namespace=self.namespace,
+                                container=snakemake_container.name,
+                            )
+                            print(kube_log_content, file=f)
+                        aux_logs = [str(kube_log)]
+                    else:
+                        aux_logs = []
+
                     self.logger.error(f"Job {j.external_jobid} failed. {msg}")
-                    self.report_job_error(j, msg=msg, aux_logs=[str(kube_log)])
+                    self.report_job_error(j, msg=msg, aux_logs=aux_logs)
+
+                    self._kubernetes_retry(
+                        lambda j=j: self.safe_delete_job(
+                            j.external_jobid, ignore_not_found=True
+                        )
+                    )
                 elif res.status.succeeded == 1 or (snakemake_container_exit_code == 0):
                     # finished
                     self.logger.info(f"Job {j.external_jobid} succeeded.")
                     self.report_job_success(j)
 
                     self._kubernetes_retry(
-                        lambda: self.safe_delete_job(
+                        lambda j=j: self.safe_delete_job(
                             j.external_jobid, ignore_not_found=True
                         )
                     )
@@ -564,7 +574,7 @@ class Executor(RemoteExecutor):
             )
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404 and ignore_not_found:
-                self.logger.warning(
+                self.logger.debug(
                     "[WARNING] 404 not found when trying to delete the job: {jobid}\n"
                     "[WARNING] Ignore this error\n".format(jobid=jobid)
                 )
