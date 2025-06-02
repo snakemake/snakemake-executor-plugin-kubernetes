@@ -388,7 +388,7 @@ class Executor(RemoteExecutor):
             self.logger.error(f"Failed to create pod: {e}")
             raise WorkflowError(f"Failed to create pod: {e}")
 
-        self.logger.info("Get status with:\n" "kubectl describe job {jobid}\n")
+        self.logger.info(f"Get status with: kubectl describe job {jobid}")
 
         self.report_job_submission(
             SubmittedJobInfo(job=job, external_jobid=jobid, aux={"pod": pod})
