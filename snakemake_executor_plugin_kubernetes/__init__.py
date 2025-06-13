@@ -466,7 +466,7 @@ class Executor(RemoteExecutor):
                     snakemake_container_exit_code = None
                     pod_name = None
 
-                if res.status.failed == 1 or (
+                if (res.status.failed and res.status.failed > 0) or (
                     snakemake_container_exit_code is not None
                     and snakemake_container_exit_code != 0
                 ):
@@ -499,7 +499,7 @@ class Executor(RemoteExecutor):
                             j.external_jobid, ignore_not_found=True
                         )
                     )
-                elif res.status.succeeded == 1 or (snakemake_container_exit_code == 0):
+                elif (res.status.succeeded and res.status.succeeded >= 1) or (snakemake_container_exit_code == 0):
                     # finished
                     self.logger.info(f"Job {j.external_jobid} succeeded.")
                     self.report_job_success(j)
