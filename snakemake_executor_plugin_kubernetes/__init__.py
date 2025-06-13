@@ -479,13 +479,18 @@ class Executor(RemoteExecutor):
                         assert snakemake_container is not None
                         kube_log = self.log_path / f"{j.external_jobid}.log"
                         with open(kube_log, "w") as f:
-                            kube_log_content = self._kubernetes_retry(
-                                lambda pod_name=pod_name, container_name=snakemake_container.name: self.kubeapi.read_namespaced_pod_log(
+
+                            def read_log(
+                                pod_name=pod_name,
+                                container_name=snakemake_container.name,
+                            ):
+                                return self.kubeapi.read_namespaced_pod_log(
                                     name=pod_name,
                                     namespace=self.namespace,
                                     container=container_name,
                                 )
-                            )
+
+                            kube_log_content = self._kubernetes_retry(read_log)
                             print(kube_log_content, file=f)
                         aux_logs = [str(kube_log)]
                     else:
