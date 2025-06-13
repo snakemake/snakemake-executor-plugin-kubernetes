@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.4.1...v0.4.2) (2025-06-13)
+
+
+### Bug Fixes
+
+* delete k8s jobs after failure (important in setups where the system attaches sidecar pods, which can otherwise remain after failure) ([#49](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/49)) ([1b24e6f](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/1b24e6f79c4fba20f34831dc9faaa333667995f6))
+
 ## [0.4.1](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.4.0...v0.4.1) (2025-05-15)
 
 
