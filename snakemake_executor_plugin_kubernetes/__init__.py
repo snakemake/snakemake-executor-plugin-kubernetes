@@ -499,7 +499,9 @@ class Executor(RemoteExecutor):
                             j.external_jobid, ignore_not_found=True
                         )
                     )
-                elif (res.status.succeeded and res.status.succeeded >= 1) or (snakemake_container_exit_code == 0):
+                elif (res.status.succeeded and res.status.succeeded >= 1) or (
+                    snakemake_container_exit_code == 0
+                ):
                     # finished
                     self.logger.info(f"Job {j.external_jobid} succeeded.")
                     self.report_job_success(j)
