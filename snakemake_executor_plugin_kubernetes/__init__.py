@@ -4,7 +4,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import time
-from typing import AsyncGenerator, List, Optional, Self
+from typing import Any, AsyncGenerator, List, Optional, Self
 import uuid
 
 import kubernetes
@@ -443,9 +443,11 @@ class Executor(RemoteExecutor):
                 # that a pod is already terminated.
                 # We therefore check the status of the snakemake container in addition
                 # to the job status.
-                pods = self.kubeapi.list_namespaced_pod(
-                    namespace=self.namespace,
-                    label_selector=f"job-name={j.external_jobid}",
+                pods = self._kubernetes_retry(
+                    lambda j=j: self.kubeapi.list_namespaced_pod(
+                        namespace=self.namespace,
+                        label_selector=f"job-name={j.external_jobid}",
+                    )
                 )
                 assert len(pods.items) <= 1
                 if pods.items:
@@ -479,10 +481,12 @@ class Executor(RemoteExecutor):
                         assert snakemake_container is not None
                         kube_log = self.log_path / f"{j.external_jobid}.log"
                         with open(kube_log, "w") as f:
-                            kube_log_content = self.kubeapi.read_namespaced_pod_log(
-                                name=pod_name,
-                                namespace=self.namespace,
-                                container=snakemake_container.name,
+                            kube_log_content = self._kubernetes_retry(
+                                lambda pod_name=pod_name, container_name=snakemake_container.name: self.kubeapi.read_namespaced_pod_log(
+                                    name=pod_name,
+                                    namespace=self.namespace,
+                                    container=container_name,
+                                )
                             )
                             print(kube_log_content, file=f)
                         aux_logs = [str(kube_log)]
@@ -625,7 +629,7 @@ class Executor(RemoteExecutor):
         if func:
             return func()
 
-    def _kubernetes_retry(self, func):
+    def _kubernetes_retry(self, func) -> Any:
         import kubernetes
         import urllib3
 
