@@ -422,11 +422,9 @@ class Executor(RemoteExecutor):
                     )
                 except kubernetes.client.rest.ApiException as e:
                     self.logger.error(f"ApiException when checking pod status: {e}")
-                    self.report_job_error(j, msg=str(e))
                     continue
                 except WorkflowError as e:
                     self.logger.error(f"WorkflowError when checking pod status: {e}")
-                    self.report_job_error(j, msg=str(e))
                     continue
 
                 if res is None:
