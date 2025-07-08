@@ -448,7 +448,7 @@ class Executor(RemoteExecutor):
                     )
                 )
                 assert len(pods.items) <= 1
-                if pods.items:
+                if pods.items and pods.items[0].status.container_statuses is not None:
                     pod = pods.items[0]
                     snakemake_container = [
                         container
