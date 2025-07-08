@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.4.2...v0.4.3) (2025-07-08)
+
+
+### Bug Fixes
+
+* handle container_statuses being None ([#52](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/52)) ([ca16c76](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/ca16c767a24e6903a3778cab14055715d5442fd7))
+
 ## [0.4.2](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.4.1...v0.4.2) (2025-06-13)
 
 
