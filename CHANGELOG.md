@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.4.3...v0.4.4) (2025-07-16)
+
+
+### Bug Fixes
+
+* do not delete job if log file cannot be retrieved ([6e02b85](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/6e02b856f8fc317f8509067580ca1b6177c3692e))
+
 ## [0.4.3](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.4.2...v0.4.3) (2025-07-08)
 
 
