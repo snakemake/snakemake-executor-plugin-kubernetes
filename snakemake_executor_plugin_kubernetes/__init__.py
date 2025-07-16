@@ -470,11 +470,6 @@ class Executor(RemoteExecutor):
                     snakemake_container_exit_code is not None
                     and snakemake_container_exit_code != 0
                 ):
-                    msg = (
-                        "For details, please issue:\n"
-                        f"kubectl describe job {j.external_jobid}"
-                    )
-
                     if pod_name is not None:
                         assert snakemake_container is not None
                         kube_log = self.log_path / f"{j.external_jobid}.log"
@@ -493,17 +488,26 @@ class Executor(RemoteExecutor):
                             kube_log_content = self._kubernetes_retry(read_log)
                             print(kube_log_content, file=f)
                         aux_logs = [str(kube_log)]
+                        msg = ""
                     else:
+                        msg = (
+                            " For details, please issue:\n"
+                            f"kubectl describe job {j.external_jobid}. "
+                            "Further, make sure to clean up the failed job "
+                            "manually in case it is not deleted automatically: "
+                            "kubectl delete job {j.external_jobid}."
+                        )
                         aux_logs = []
 
-                    self.logger.error(f"Job {j.external_jobid} failed. {msg}")
+                    self.logger.error(f"Job {j.external_jobid} failed.{msg}")
                     self.report_job_error(j, msg=msg, aux_logs=aux_logs)
 
-                    self._kubernetes_retry(
-                        lambda j=j: self.safe_delete_job(
-                            j.external_jobid, ignore_not_found=True
+                    if pod_name is not None:
+                        self._kubernetes_retry(
+                            lambda j=j: self.safe_delete_job(
+                                j.external_jobid, ignore_not_found=True
+                            )
                         )
-                    )
                 elif (res.status.succeeded and res.status.succeeded >= 1) or (
                     snakemake_container_exit_code == 0
                 ):
