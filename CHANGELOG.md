@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.4.4...v0.5.0) (2025-07-23)
+
+
+### Features
+
+* allow to omit job cleanup with --kubernetes-omit-job-cleanup (for debugging) ([#55](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/55)) ([0712e46](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/0712e46f81e745a4a7fed7b33444056470337a84))
+
 ## [0.4.4](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.4.3...v0.4.4) (2025-07-16)
 
 
