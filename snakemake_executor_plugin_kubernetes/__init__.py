@@ -95,6 +95,14 @@ class ExecutorSettings(ExecutorSettingsBase):
             "nargs": "+",
         },
     )
+    omit_job_cleanup: bool = field(
+        default=False,
+        metadata={
+            "help": "Do not delete jobs after they have finished or failed. "
+            "This is useful for debugging, or if your k8s cluster performs "
+            "automatic cleanups."
+        },
+    )
 
 
 # Required:
@@ -502,7 +510,10 @@ class Executor(RemoteExecutor):
                     self.logger.error(f"Job {j.external_jobid} failed.{msg}")
                     self.report_job_error(j, msg=msg, aux_logs=aux_logs)
 
-                    if pod_name is not None:
+                    if (
+                        pod_name is not None
+                        and not self.workflow.executor_settings.omit_job_cleanup
+                    ):
                         self._kubernetes_retry(
                             lambda j=j: self.safe_delete_job(
                                 j.external_jobid, ignore_not_found=True
@@ -515,11 +526,12 @@ class Executor(RemoteExecutor):
                     self.logger.info(f"Job {j.external_jobid} succeeded.")
                     self.report_job_success(j)
 
-                    self._kubernetes_retry(
-                        lambda j=j: self.safe_delete_job(
-                            j.external_jobid, ignore_not_found=True
+                    if not self.workflow.executor_settings.omit_job_cleanup:
+                        self._kubernetes_retry(
+                            lambda j=j: self.safe_delete_job(
+                                j.external_jobid, ignore_not_found=True
+                            )
                         )
-                    )
                 else:
                     # still active
                     self.logger.debug(f"Job {j.external_jobid} is still active.")
