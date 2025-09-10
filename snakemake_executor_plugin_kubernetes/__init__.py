@@ -491,6 +491,7 @@ class Executor(RemoteExecutor):
                                     name=pod_name,
                                     namespace=self.namespace,
                                     container=container_name,
+                                    previous=True,
                                 )
 
                             kube_log_content = self._kubernetes_retry(read_log)
