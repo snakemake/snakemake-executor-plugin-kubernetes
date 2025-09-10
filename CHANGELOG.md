@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.5.0...v0.5.1) (2025-09-10)
+
+
+### Bug Fixes
+
+* enable retrieving logs from terminated containers ([#57](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/issues/57)) ([98ae2ae](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/commit/98ae2aee2a0937c990b0b9d060d6df108a50e5e7))
+
 ## [0.5.0](https://github.com/snakemake/snakemake-executor-plugin-kubernetes/compare/v0.4.4...v0.5.0) (2025-07-23)
 
 

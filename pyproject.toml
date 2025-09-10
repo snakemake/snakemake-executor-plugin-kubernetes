@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "snakemake-executor-plugin-kubernetes"
-version = "0.5.0"
+version = "0.5.1"
 description = "A snakemake executor plugin for submission of jobs to Kubernetes"
 authors = ["Johannes Koester <johannes.koester@uni-due.de>"]
 readme = "README.md"
@@ -21,7 +21,7 @@ flake8 = "^6.1.0"
 coverage = "^7.3.1"
 pytest = "^7.4.1"
 snakemake = ">=8.18,<10.0"
-snakemake-storage-plugin-s3 = ">=0.2.7,<0.4.0"
+snakemake-storage-plugin-s3 = "^0.2.7"
 
 [tool.coverage.run]
 omit = [".*", "*/site-packages/*", "Snakefile"]
