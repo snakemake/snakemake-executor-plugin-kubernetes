@@ -260,29 +260,6 @@ class Executor(RemoteExecutor):
                     "Must be 'nvidia' or 'amd'."
                 )
 
-        # capabilities
-        if (
-            job.is_containerized
-            and DeploymentMethod.APPTAINER
-            in self.workflow.deployment_settings.deployment_method
-        ):
-            # TODO this should work, but it doesn't currently because of
-            # missing loop devices
-            # singularity inside docker requires SYS_ADMIN capabilities
-            # see
-            # https://groups.google.com/a/lbl.gov/forum/#!topic/singularity/e9mlDuzKowc
-            # container.capabilities = kubernetes.client.V1Capabilities()
-            # container.capabilities.add = ["SYS_ADMIN",
-            #                               "DAC_OVERRIDE",
-            #                               "SETUID",
-            #                               "SETGID",
-            #                               "SYS_CHROOT"]
-
-            # Running in priviledged mode always works
-            container.security_context = kubernetes.client.V1SecurityContext(
-                privileged=True
-            )
-
         # Add service account name if provided
         if self.k8s_service_account_name:
             pod_spec.service_account_name = self.k8s_service_account_name
@@ -370,7 +347,10 @@ class Executor(RemoteExecutor):
                 if not scale_value:
                     container.resources.limits["nvidia.com/gpu"] = gpu_count
         # Privileged mode
-        if self.privileged:
+        if self.privileged or (
+            DeploymentMethod.APPTAINER
+            in self.workflow.deployment_settings.deployment_method
+        ):
             container.security_context = kubernetes.client.V1SecurityContext(
                 privileged=True
             )
