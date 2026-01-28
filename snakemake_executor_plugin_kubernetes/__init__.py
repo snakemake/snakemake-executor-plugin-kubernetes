@@ -592,7 +592,7 @@ class Executor(RemoteExecutor):
     def safe_delete_job(self, jobid, ignore_not_found=True):
         import kubernetes.client
 
-        body = kubernetes.client.V1DeleteOptions(propagation_policy="Foreground")
+        body = kubernetes.client.V1DeleteOptions(propagation_policy="Background")
         self.logger.debug(f"Deleting job {jobid} in namespace {self.namespace}")
         try:
             self.batchapi.delete_namespaced_job(
