@@ -592,24 +592,11 @@ class Executor(RemoteExecutor):
     def safe_delete_job(self, jobid, ignore_not_found=True):
         import kubernetes.client
 
-        body = kubernetes.client.V1DeleteOptions()
+        body = kubernetes.client.V1DeleteOptions(propagation_policy="Background")
         self.logger.debug(f"Deleting job {jobid} in namespace {self.namespace}")
         try:
-            # Usually, kubernetes should delete the pods automatically
-            # when the job is deleted, but in some cases, this does not
-            # happen, so we delete the pods manually.
-            pods = self.kubeapi.list_namespaced_pod(
-                namespace=self.namespace,
-                label_selector=f"job-name={jobid}",
-            )
-            for pod in pods.items:
-                self.logger.debug(f"Deleting pod {pod.metadata.name} for job {jobid}")
-                self.kubeapi.delete_namespaced_pod(
-                    pod.metadata.name, self.namespace, body=body
-                )
-
             self.batchapi.delete_namespaced_job(
-                jobid, self.namespace, propagation_policy="Foreground", body=body
+                jobid, self.namespace, body=body
             )
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404 and ignore_not_found:
