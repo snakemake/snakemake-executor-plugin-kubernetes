@@ -203,6 +203,11 @@ class Executor(RemoteExecutor):
             ]
             self.logger.debug(f"Set node selector for machine type: {node_selector}")
 
+        # Optional: schedule on labeled burst-pool nodes, e.g. role=snakemake-exec
+        if "node_role" in resources_dict:
+            node_selector["role"] = str(resources_dict["node_role"])
+            self.logger.debug(f"Set node selector for role: {node_selector}")
+
         # Initialize PodSpec
         pod_spec = kubernetes.client.V1PodSpec(
             containers=[container], node_selector=node_selector, restart_policy="Never"
@@ -212,6 +217,44 @@ class Executor(RemoteExecutor):
             template=kubernetes.client.V1PodTemplateSpec(spec=pod_spec),
         )
 
+        # ---------------------------------------------------------------------
+        # Base toleration for workload taint from resources (node_taint)
+        # ---------------------------------------------------------------------
+        if "node_taint" in resources_dict:
+            if pod_spec.tolerations is None:
+                pod_spec.tolerations = []
+            toleration = str(resources_dict["node_taint"])
+            try:
+                key, rest = toleration.split("=", 1)
+                value, effect = rest.split(":", 1)
+            except ValueError:
+                raise WorkflowError(
+                    f"Invalid node_taint format: '{toleration}'. "
+                    "Expected format: key=value:effect"
+                )
+
+            if key == "" or value == "" or effect == "":
+                raise WorkflowError(
+                    "Invalid node_taint format. "
+                    "Expected format: key=value:effect"
+                )
+            if effect not in ["NoSchedule", "PreferNoSchedule", "NoExecute"]:
+                raise WorkflowError(
+                    "Invalid effect in node_taint. "
+                    "Expected one of NoSchedule, PreferNoSchedule, NoExecute."
+                )
+            pod_spec.tolerations.append(
+                kubernetes.client.V1Toleration(
+                    key=key,
+                    operator="Equal",
+                    value=value,
+                    effect=effect
+                )
+            )
+            self.logger.debug(
+                "Added workload taint toleration: "
+                f"workload={resources_dict['node_taint']}"
+            )
         # Add toleration for GPU nodes if GPU is requested
         if "gpu" in resources_dict:
             # Manufacturer logic
@@ -259,26 +302,11 @@ class Executor(RemoteExecutor):
                     f"Unsupported GPU manufacturer '{manufacturer}'. "
                     "Must be 'nvidia' or 'amd'."
                 )
-
         # capabilities
-        if (
-            job.is_containerized
-            and DeploymentMethod.APPTAINER
+        if self.privileged or (
+            DeploymentMethod.APPTAINER
             in self.workflow.deployment_settings.deployment_method
         ):
-            # TODO this should work, but it doesn't currently because of
-            # missing loop devices
-            # singularity inside docker requires SYS_ADMIN capabilities
-            # see
-            # https://groups.google.com/a/lbl.gov/forum/#!topic/singularity/e9mlDuzKowc
-            # container.capabilities = kubernetes.client.V1Capabilities()
-            # container.capabilities.add = ["SYS_ADMIN",
-            #                               "DAC_OVERRIDE",
-            #                               "SETUID",
-            #                               "SETGID",
-            #                               "SYS_CHROOT"]
-
-            # Running in priviledged mode always works
             container.security_context = kubernetes.client.V1SecurityContext(
                 privileged=True
             )
